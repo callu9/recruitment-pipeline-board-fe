@@ -976,7 +976,7 @@ docs/IMPLEMENTATION_AND_COMMIT_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 코�
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(stage-move): 명시적 단계 변경과 mock API 저장
@@ -986,7 +986,7 @@ docs/IMPLEMENTATION_AND_COMMIT_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 코�
   - 낙관적 업데이트와 경쟁 상태 처리는 다음 scope로 분리
   ```
 
-- 상태: 미커밋
+- 해시: `938dcb9`
 - AI 초안 수정 요약: 응답만 흉내 낸 PATCH 테스트를 실제 MSW handler·localStorage 재조회 테스트로 보강했다.
 
 ## 기능 기록 템플릿
