@@ -497,7 +497,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md와 현재 코드를 읽�
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```
   feat(mock-api): 지원자 조회·단계 저장과 지연·실패·영속화 구현
@@ -508,7 +508,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md와 현재 코드를 읽�
   - AI 초안의 상대 MSW route가 Node에서 매칭되지 않아 origin wildcard route로 수정
   ```
 
-- 상태: 미커밋
+- 해시: ab948cb
 - AI 초안 수정 요약: Node MSW route 매칭, 저장소 런타임 검증, 최초 실패 PATCH 불변성, 환경 실패율 연결을 보완했다.
 
 ## [board-layout] 채용 단계 컬럼과 보드 기본 레이아웃 구현
@@ -671,7 +671,7 @@ PROMPTS.md를 수정하거나 커밋하지 마라.
 
 아래 블록을 기능마다 복사한다. 제출 전 빈 템플릿은 제거한다.
 
-```md
+````md
 ## [feature-scope] 기능명
 
 ### 목표 / 수용 기준
@@ -739,10 +739,12 @@ PROMPTS.md를 수정하거나 커밋하지 마라.
   - 무엇:
   - 왜:
   ```
+````
 
 - 상태: 미커밋
 - AI 초안 수정 요약: 한 줄
-```
+
+````
 
 ## 좋은 리뷰 예시
 
@@ -754,7 +756,7 @@ PROMPTS.md를 수정하거나 커밋하지 마라.
 - 전체 snapshot rollback을 기각하고, `previousApplicant` 한 건만 context에 저장해 `replaceApplicant`로 복구하도록 수정했다.
 - PATCH를 600ms 지연한 테스트에서 응답 전 목표 컬럼 이동을 확인했고, 503 응답 후 A만 원래 컬럼으로 돌아가며 B는 목표 컬럼에 남는 것을 확인했다.
 - `npm run lint`, `npm run test`, `npm run build` 모두 통과했다.
-```
+````
 
 ## 피해야 할 리뷰 예시
 
