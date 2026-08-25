@@ -304,9 +304,212 @@ AGENTS.md와 아래를 읽고 작업. 참고: 이번 작업 scope는 project-set
 
 ### 연결 커밋
 
-- 예정 메시지: `chore(prompt-workflow): 세션별 프롬프트 기록 흐름 개선`
-- 상태: 미커밋
+- 메시지: `chore(prompt-workflow): 세션별 프롬프트 기록 흐름 개선`
+- 해시: `83231eb`
 - AI 초안 수정 요약: 최신 로그 추측을 제거하고 hook이 전달한 세션 ID만 사용하도록 제한했다.
+
+## [mock-api] 지원자 조회·단계 저장과 지연·실패·영속화 구현
+
+### 목표 / 수용 기준
+
+- 연결 근거: 과제 §4 mock API 기술 제약, TECH_SPEC §3–5, 구현·커밋 계획 Commit 03
+- 이번 기능에서 완료한 범위:
+  - Applicant 도메인 타입과 `STAGES`
+  - 결정적 240건 seed 및 localStorage 저장소
+  - MSW `GET /api/applicants`, `PATCH /api/applicants/:applicantId/stage`
+  - browser worker와 테스트용 Node server 연결
+  - 200–800ms 지연, 기본 약 15% 실패, `VITE_MOCK_FAILURE_RATE` override
+  - 저장소 런타임 검증 및 실패 PATCH 저장소 불변성
+  - mock API 자동 테스트
+- 이번 기능에서 하지 않은 범위:
+  - TanStack Query query/mutation hook
+  - 보드·카드·검색·상세 UI
+  - 낙관적 업데이트·캐시 롤백·pending guard
+  - Undo, 가상화, 개발용 데이터 초기화 UI
+  - 새 라이브러리 추가
+  - 커밋
+
+### 프롬프트 1 — 최초 지시
+
+```text
+AGENTS.md, docs/ASSIGNMENT.md, docs/PRD.md, docs/TECH\_SPEC.md,
+docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md와 현재 코드를 읽어라.
+
+이번 작업 scope는 `mock-api` 하나뿐이다.
+연결 근거는 과제 §4 mock API 기술 제약이며, 구현·커밋 계획의 Commit 03을 따른다.
+
+완료 기준:
+
+- `Applicant`, `ApplicantStage`, `ApplicantRole`, `MoveApplicantStageRequest`, `ApiErrorBody` 타입과 `STAGES`를 구현한다.
+- 최초 실행 시 결정적으로 생성되는 240건의 지원자 데이터를 `localStorage`에 저장·조회한다.
+- `GET /api/applicants`와 `PATCH /api/applicants/:applicantId/stage`를 MSW로 구현한다.
+- 모든 요청은 200\~800ms 지연을 가지며 기본 실패율은 약 15%다.
+- 실패 여부는 저장 전에 판정하며, 실패한 PATCH는 `localStorage`를 변경하지 않는다.
+- PATCH는 존재하지 않는 ID, 빈·잘못된 JSON, 객체가 아닌 body, 유효하지 않은 stage 타입·값을 저장 없이 적절한 400/404 오류로 반환한다.
+- 브라우저 MSW worker와 테스트용 MSW Node server를 연결한다.
+- 다음을 테스트한다: 결정적 seed, GET 성공 240건, GET 강제 실패 503, PATCH 성공 영속화, PATCH 실패 시 저장소 불변, 잘못된 PATCH 입력 거부, 지연 범위와 기본 실패율, 서로 다른 두 PATCH 성공 후 재조회 시 두 변경 유지.
+
+이번 작업에서 하지 않을 것:
+
+- TanStack Query query/mutation hook
+- 보드·카드·검색·상세 UI
+- 낙관적 업데이트·캐시 롤백·pending guard
+- Undo, 가상화, 개발용 데이터 초기화 UI
+- 새 라이브러리 추가
+- 커밋 실행
+
+제약:
+
+- 기존 project-setup 범위와 문서를 보존한다.
+- UI는 실제 `fetch('/api/...')` 경계를 사용할 수 있게 MSW handler를 구현한다.
+- 저장소 함수는 UI와 분리하고, PATCH 성공 시 최신 `localStorage`를 읽어 대상 한 건만 동기적으로 갱신·저장한다.
+- 랜덤 실패에 의존하는 flaky 테스트를 작성하지 않는다. 테스트에서는 handler override 또는 주입 가능한 설정으로 성공·실패를 결정적으로 제어한다.
+- 불필요한 추상화·설정·의존성을 추가하지 않는다.
+- `PROMPTS.md`의 실제 프롬프트·검증 기록은 내가 작성한다. 내용 초안만 제안할 수 있다.
+- 커밋하지 않는다.
+
+편집 전에 먼저 다음을 출력해라.
+
+1. 현재 코드에서 재사용할 설정과 파일
+2. 생성·수정할 파일과 각 책임
+3. `GET → handler → localStorage` 및 `PATCH → 검증 → 실패 판정 → 저장` 흐름
+4. 실패·경계 시나리오와 저장소 불변 조건
+5. 먼저 작성하거나 확인할 테스트
+6. 범위를 넘는 제안과 그 필요성
+
+그 뒤 `mock-api` 범위만 최소 구현해라.
+
+완료 후에는 다음을 실제 결과만으로 보고하고 멈춰라.
+
+- 변경 파일과 diff 요약
+- 실행한 관련 테스트 및 `npm run lint`, `npm run test`, `npm run build` 결과
+- 수동 검증 항목
+- 만족한 완료 기준
+- 알려진 한계
+- AI 생성 코드 중 수정·기각한 부분과 이유
+- `PROMPTS.md`에 기록할 `AI 출력 요지` 초안
+```
+
+### AI 출력 요지
+
+- `Applicant`, `ApplicantStage`, `ApplicantRole`, `MoveApplicantStageRequest`, `ApiErrorBody`, `STAGES`를 구현했다.
+- index 기반으로 결정적 240건 seed를 생성하고 localStorage에 저장·조회·단계 변경을 구현했다.
+- MSW로 GET/PATCH API를 구현하고 browser worker와 Node server에 같은 handler를 연결했다.
+- 요청마다 200–800ms 지연을 적용하고, 기본 실패율 0.15와 `VITE_MOCK_FAILURE_RATE`의 0–1 제한을 구현했다.
+- PATCH는 body·stage·ID를 검증하고, 실패 판정 뒤 성공한 경우에만 최신 저장 데이터의 대상 한 건을 동기적으로 저장한다.
+- 결정적 seed, GET 성공·실패, PATCH 성공·실패, 입력 오류, 동시 PATCH 유지, 손상 저장소 복구, 환경 실패율을 테스트했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독
+
+- 최초 구현에서 MSW Node server가 상대 route를 매칭하지 않아 실제 fetch 테스트가 실패했다. Node와 browser 모두에서 매칭되도록 `*/api/...` route로 수정했다.
+- 생성된 MSW worker의 vendor lint 경고는 worker를 수정하지 않고 lint 대상에서 제외했다.
+- 후속 리뷰에서 다음 문제를 발견해 수정했다.
+  - 저장소 스키마 검증이 `id`, `stage` 문자열만 확인해 필수 필드 누락·허용되지 않은 role/stage를 통과시켰다.
+  - 빈 localStorage에서 강제 실패 PATCH가 ID 검증 중 seed를 저장해 저장소 불변 조건을 어겼다.
+  - README에 안내된 `VITE_MOCK_FAILURE_RATE=0/1`이 실제 failure 판정에 연결되지 않았다.
+- 전체 목록 snapshot 복원, query hook, UI, reset UI, 추가 상태 라이브러리는 이번 scope에서 기각했다.
+
+#### 2. 자동 검증
+
+- RED 확인:
+  - 빈 저장소에서 강제 실패 PATCH 후 저장 키가 생성되는 문제를 재현했다.
+  - name, role, stage 등 손상된 저장 데이터가 그대로 반환되는 문제를 재현했다.
+  - 실패율 resolver 부재를 재현했다.
+- 테스트 범위:
+  - 결정적 seed
+  - GET 240건 성공 및 강제 503
+  - PATCH 성공 영속화, 일반 실패·최초 실패의 저장소 불변
+  - 빈·잘못된 JSON, 객체가 아닌 body, 유효하지 않은 stage, 존재하지 않는 ID 거부
+  - 두 PATCH 성공 뒤 재조회 시 두 변경 유지
+  - 손상된 Applicant 필드와 허용되지 않은 role·stage의 seed 복구
+  - 실패율 기본값·0·1·음수·1 초과·비숫자
+  - `VITE_MOCK_FAILURE_RATE=0/1` 설정 뒤 module reload한 `shouldMockApiFail()` 결과
+- 실제 실행 결과:
+  - `npm run lint` 통과
+  - `npm run test` 통과 — 5 files, 35 tests
+  - `npm run build` 통과
+  - `git diff --check` 통과
+- build는 500kB 초과 chunk 경고를 출력했다. mock-api scope에서는 code-splitting을 추가하지 않았다.
+
+#### 3. 수동 검증
+
+- 사용자 보고:
+  - `VITE_MOCK_FAILURE_RATE=0`과 `1`을 각각 설정하고 dev server를 재시작했다.
+  - 브라우저 콘솔의 `fetch('/api/applicants')`가 각각 200과 503을 반환하는 것을 확인했다.
+- 미검증:
+  - API 호출 UI가 아직 없어 UI 상태에서의 성공·실패 표시는 검증하지 않았다.
+
+#### 4. 최종 판단
+
+- 수정 후 채택.
+- 확인한 범위:
+  - mock API HTTP 계약, localStorage 영속화, 입력 오류, 실패 PATCH 불변성, 손상 저장소 복구, 결정적 실패 제어.
+- 남은 위험:
+  - 다음 UI 범위에서 query hook·낙관적 업데이트와 결합한 브라우저 동작을 검증해야 한다.
+
+### 후속 프롬프트 2 — 개발 명세와의 차이 리뷰
+
+```markdown
+개발 명세와 동일하지 않은 부분을 발견했다
+
+- `mockDB.ts`의 스키마 검증이 불완전하다. id, stage 외에도 name, role, skill 등 누락된 데이터도 체크하여 모든 필수 필드 타입을 확인하고 허용 role을 확인한다
+- 실패한 PATCH는 저장소를 변경하지 않는다는 개발 명세를 위반한다. 사용자가 앱을 처음 실행해 localStorage가 비어있는 경우를 테스트하여 이 경계를 확인하고 놓치지 않아야 한다
+- 기본 실패율은 `VITE_MOCK_FAILURE_RATE ?? 0.15`이며 0\~1 범위로 제한해야 하는데, 브라우저에서 실패율을 고정할 방법이 없고 0.15로 고정되어 있어 테스트 내부에서만 실패율을 바꿀 수 있다. 사용자가 실패를 확인할 수 있는 환경인지 확인한다
+
+코드 수정은 하지 않고 개선점 리뷰만
+```
+
+### 후속 출력과 추가 검증
+
+- 리뷰에서 세 지적을 재현·확인했다.
+- `mockDb.ts`는 id와 stage만 확인해 손상된 Applicant를 통과시켰다.
+- 빈 localStorage에서 강제 실패 PATCH가 ID 검증 중 seed를 저장했다.
+- `VITE_MOCK_FAILURE_RATE`는 README에만 기록되고 실제 failure 판정에는 연결되지 않았다.
+- 이 단계에서는 사용자 요청대로 코드를 수정하지 않았다.
+
+### 후속 프롬프트 3 — 수동 확인과 회귀 검토
+
+```go
+`VITE_MOCK_FAILURE_RATE` `0`/`1`을 설정하고 dev server 재시작 후 브라우저 콘솔의 `fetch('/api/applicants')`가 각각 200/503을 반환하는지 확인했다
+빈 저장소 PATCH 불변성, 저장 데이터 런타임 검증, 실패율 범위 제한을 구현했고, 해당 테스트로 회귀를 감지하고 있는지 확인 필요
+```
+
+### 후속 출력과 추가 검증
+
+- 사용자 보고의 브라우저 수동 확인을 기록했다.
+- 빈 저장소 실패 PATCH, 저장소 런타임 검증, 실패율 범위 제한 테스트가 각각의 회귀를 감지하는지 확인했다.
+- 당시 환경값과 `shouldMockApiFail()`의 실제 연결은 자동 테스트로 완전히 보장되지 않는다는 공백을 확인했다.
+
+### 후속 프롬프트 4 — 환경값 module reload 테스트
+
+```go
+`VITE_MOCK_FAILURE_RATE`를 바꾼 상태로 모듈을 다시 불러와 `shouldMockApiFail()` 결과까지 확인하는 테스트를 추가해
+```
+
+### 후속 출력과 추가 검증
+
+- `VITE_MOCK_FAILURE_RATE=0/1`을 설정한 뒤 module cache를 비우고 `mockConfig`를 다시 import하는 테스트를 추가했다.
+- 난수 0.5에서 `0`은 실패하지 않고 `1`은 실패하는 것을 확인했다.
+- `npm run lint`, `npm run test`, `npm run build`, `git diff --check`를 실행했다.
+- 최종 결과: lint 통과, 테스트 5 files / 35 tests 통과, build 통과. build는 500kB 초과 chunk 경고만 출력했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```
+  feat(mock-api): 지원자 조회·단계 저장과 지연·실패·영속화 구현
+
+  - MSW GET/PATCH와 localStorage 기반 240건 seed를 추가해 실제 fetch 경계를 유지
+  - 실패를 저장 전에 판정하고, 최초 실패 PATCH도 저장소를 초기화하지 않도록 보완
+  - 손상된 저장 데이터 복구와 VITE_MOCK_FAILURE_RATE 0~1 제어를 추가
+  - AI 초안의 상대 MSW route가 Node에서 매칭되지 않아 origin wildcard route로 수정
+  ```
+
+- 상태: 미커밋
+- AI 초안 수정 요약: Node MSW route 매칭, 저장소 런타임 검증, 최초 실패 PATCH 불변성, 환경 실패율 연결을 보완했다.
 
 ## 기능 기록 템플릿
 
