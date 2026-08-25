@@ -233,9 +233,80 @@ AGENTS.md와 아래를 읽고 작업. 참고: 이번 작업 scope는 project-set
 
 ### 연결 커밋
 
-- 예정 메시지: `chore(project-setup): React TypeScript 프로젝트와 품질 도구 초기화`
+- 메시지: `chore(project-setup): React TypeScript 프로젝트와 품질 도구 초기화`
+- 해시: `092e31c`
+
+## [prompt-workflow] 세션별 프롬프트 기록 흐름 개선
+
+### 목표 / 수용 기준
+
+- `UserPromptSubmit` 훅이 프롬프트 저장 후 현재 로그 세션 ID를 모델에 전달한다.
+- `prompt-record`는 전달받은 세션의 JSONL 파일 하나만 읽는다.
+- 세션 ID나 해당 파일이 없으면 다른 로그를 추측하지 않고 중단한다.
+- 사이드 대화 로그와 최신 로그 탐색을 사용하지 않는다.
+- 관련 단위 테스트를 추가한다.
+- `PROMPTS.md` 수정과 커밋은 이번 구현 범위에서 제외한다.
+
+### 프롬프트 1 — 세션 로그 선택 방식 개선
+
+(실제 hook 로그에 저장된 구현 지시 원문을 여기에 그대로 삽입)
+
+### AI 출력 요지
+
+- `capture-prompt.mjs`가 프롬프트 기록 후
+  `PROMPT_LOG_SESSION_ID=<session_id>`를 `additionalContext`로 반환하도록 변경했다.
+- `prompt-record`가 해당 ID의 로그만 읽도록 전용 reader를 추가했다.
+- ID가 없거나 파일이 없을 때 종료하고 다른 로그를 검색하지 않도록 했다.
+- 선택된 로그와 사이드 로그가 함께 있어도 선택된 로그만 반환하는 테스트를 추가했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독
+
+- 유지:
+  - 기존 JSONL 기록 형식과 세션별 파일 구조
+  - 사용자 프롬프트 원문 저장 방식
+- 수정:
+  - 로그 저장 성공 뒤 세션 ID를 hook output으로 반환
+  - `main_session_id` 또는 최신 파일 탐색 대신 hook이 전달한 ID 사용
+- 기각:
+  - `.codex/session-logs` 전체 glob
+  - 수정 시각을 이용한 최신 로그 선택
+  - 사이드 대화 로그 병합
+
+#### 2. 자동 검증
+
+- 실행 명령:
+  - `node --test .codex/hooks/capture-prompt.test.mjs .agents/skills/prompt-record/prompt-record.test.mjs`
+  - `node --check .codex/hooks/capture-prompt.mjs`
+  - `node --check .agents/skills/prompt-record/scripts/read-prompt-log.mjs`
+  - `git diff --check`
+- 실제 결과:
+  - Node 단위 테스트 5개 통과
+  - 두 스크립트 구문 검사 통과
+  - diff whitespace 오류 없음
+- 확인한 경계 조건:
+  - 지정된 세션 로그만 읽음
+  - 세션 ID가 없으면 실패
+  - 지정 파일이 없으면 다른 로그를 선택하지 않고 실패
+
+#### 3. 수동 검증
+
+- 사용자 보고: `mock-api` feature에서 프롬프트 기록 흐름 검증 완료.
+- 구체적인 재현 단계와 관찰 결과: 미기록.
+
+#### 4. 최종 판단
+
+- 수정 후 채택.
+- 확인한 범위: hook 반환 계약, 정확한 세션 로그 선택, fail-closed 동작, 단위 테스트.
+- 사용자 확인 범위: `mock-api` feature에서 실제 프롬프트 기록 흐름 검증 완료.
+- 남은 위험: 구체적인 수동 검증 절차와 관찰 결과는 기록되지 않음.
+
+### 연결 커밋
+
+- 예정 메시지: `chore(prompt-workflow): 세션별 프롬프트 기록 흐름 개선`
 - 상태: 미커밋
-- AI 초안 수정 요약: Vite 기본 예제와 oxlint 구성을 제거하고, 빈 shell 및 ESLint·Vitest 기반으로 축소했다.
+- AI 초안 수정 요약: 최신 로그 추측을 제거하고 hook이 전달한 세션 ID만 사용하도록 제한했다.
 
 ## 기능 기록 템플릿
 

@@ -1,0 +1,17 @@
+{
+  "description": "Capture exact user prompts for PROMPTS.md drafts",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/capture-prompt.mjs",
+            "timeout": 5,
+            "statusMessage": "Recording prompt source"
+          }
+        ]
+      }
+    ]
+  }
+}
