@@ -3,3 +3,39 @@
   max-width: 72rem;
   padding: 2rem;
 }
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.header h1,
+.column h2 {
+  margin: 0;
+}
+
+.boardViewport {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(15rem, 1fr));
+  gap: 1rem;
+  min-width: 79rem;
+}
+
+.column {
+  min-height: 24rem;
+  padding: 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
