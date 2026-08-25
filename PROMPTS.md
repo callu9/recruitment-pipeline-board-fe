@@ -667,6 +667,161 @@ PROMPTS.md를 수정하거나 커밋하지 마라.
 
 - 해시: `47a0fde`
 
+## [card-list] 지원자 조회와 단계별 카드 표시 구현
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-02, FR-01의 컬럼 카운트 표시
+- 완료 범위: GET 조회·TanStack Query cache, stage별 순수 그룹화, 카드 필수 정보·컬럼 카운트, 명시적 조회 재시도
+- 제외 범위: PATCH·이동·낙관적 업데이트·필터·상세·카드 클릭·mock API/저장소 변경·새 라이브러리·커밋
+
+### 프롬프트 1 — 최초 지시
+
+```text
+AGENTS.md와 docs/ASSIGNMENT.md, docs/PRD.md, docs/TECH\_SPEC.md,
+docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 최근 커밋과 현재 코드를 읽어라.
+
+이번 작업 scope는 card-list 하나뿐이다.
+연결 요구사항은 FR-02이며, FR-01의 컬럼 카운트 표시와 연결된다.
+
+완료 기준:
+
+- GET /api/applicants로 지원자 목록을 조회한다.
+- 각 지원자는 자신의 현재 stage 컬럼에 정확히 한 번 표시된다.
+- 카드에 이름, 직무, 지원일(YYYY.MM.DD), 현재 단계가 표시된다.
+- 각 컬럼 카운트가 표시된 카드 수와 일치한다.
+- 기존 STAGES와 Applicant 타입을 재사용한다.
+- 단계별 그룹화처럼 핵심 변환이 필요하면 순수 함수로 두고 관련 테스트를 작성한다.
+
+이번 작업에서 하지 않을 것:
+
+- 단계 이동, PATCH 연결, 낙관적 업데이트, pending 처리
+- 검색·직무 필터
+- 상세 패널과 카드 클릭 동작
+- 로딩·조회 오류·전체 빈 상태 UI
+- mock API 계약·handler·seed·저장소 변경
+- 범위 밖 리팩터링, 새 라이브러리, 커밋
+
+편집 전에 다음을 출력해라.
+
+1. 현재 코드에서 재사용할 부분
+2. 생성·수정할 파일과 각각의 책임
+3. 조회부터 컬럼·카드 렌더링까지의 데이터 흐름
+4. 실패·경계 시나리오
+5. 먼저 작성하거나 확인할 테스트
+6. 요구사항을 넘는 제안과 필요성
+
+계획 뒤 card-list 범위만 최소 구현하라.
+완료 후 변경 파일, diff 요약, 실제 실행한 테스트와 npm run lint/test/build 결과,
+수동 브라우저 검증 여부와 미검증 항목을 보고하고 멈춰라.
+커밋하거나 PROMPTS.md의 리뷰/검증 사실을 추정해 작성하지 마라.
+```
+
+### 후속 프롬프트 2 — 미커밋 diff 리뷰
+
+```text
+현재 브랜치의 미커밋 diff를 리뷰해라. 파일은 수정하지 마라.
+
+대상 scope는 card-list이고 연결 요구사항은 FR-02다.
+AGENTS.md, PRD, TECH\_SPEC, IMPLEMENTATION\_AND\_COMMIT\_PLAN,
+현재 코드와 최근 커밋을 먼저 읽어라.
+
+우선순위:
+
+1. 지원자 조회·단계별 배치·카운트의 요구 누락 또는 잘못된 해석
+2. 카드의 이름·직무·지원일·현재 단계 불일치
+3. API, mock 저장소, 단계 이동, 상세 보기 등 다음 scope의 선행 구현
+4. 날짜 처리와 단계 그룹화의 경계 사례
+5. semantic HTML·키보드 접근성·중첩 인터랙션 문제
+6. 불필요한 추상화·의존성·미사용 코드
+7. 테스트가 통과해도 놓치는 반례
+
+각 지적은 아래 형식으로 작성해라.
+
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 왜 문제인지
+- 최소 수정안
+
+문제가 없으면 요구사항별 확인 근거와 남은 미검증 항목을 구분해라.
+추측은 추측이라고 표시하고, 스타일 취향만으로 지적하지 마라.
+```
+
+### 후속 프롬프트 3 — 조회 재시도 개선
+
+```text
+사용자가 명시적 재시도를 함으로써 목록 표시할 수 있도록 수정안대로 개선 후 재리뷰
+```
+
+### AI 출력 요지
+
+- `useApplicantsQuery`로 `GET /api/applicants`를 TanStack Query cache에 연결했다.
+- `groupApplicantsByStage`가 모든 `STAGES`를 초기화하고 지원자를 stage별로 한 번씩 배치한다.
+- 기존 컬럼에서 카드와 실제 카운트를 렌더링하고, 이름·직무·`YYYY.MM.DD` 지원일·현재 단계를 표시했다.
+- `StageColumn`, `ApplicantCard` JSX 시작 지점에 사용자 요청의 설명 주석을 추가했다.
+- `retry: false`와 `다시 시도` 버튼의 `refetch()`를 추가했다.
+- 새 라이브러리, PATCH·이동·상세·필터, mock API·저장소 변경은 추가하지 않았다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독·리뷰
+
+- 채택:
+  - 기존 `STAGES`, `Applicant`, TanStack Query provider와 MSW GET handler를 재사용했다.
+  - 그룹화를 순수 함수로 분리하고, 빈 stage와 지원자 단 한 번 배치를 테스트했다.
+  - 카드 현재 단계는 배치된 컬럼의 label을 사용해 컬럼과 모순되지 않게 했다.
+  - 사용자 요청에 따라 실제 컴포넌트 추출 대신 JSX 책임 주석만 추가했다.
+- 수정:
+  - ISO timestamp에 `replaceAll('-', '.')`만 적용하면 시간 부분이 남았다. `slice(0, 10)` 뒤 점 표기로 바꾸고 ISO fixture 회귀 테스트를 추가했다.
+  - diff 리뷰에서 production query가 기본 자동 재시도를 상속한다는 major를 발견했다. PRD·TECH_SPEC의 `retry: 0` 기준에 맞춰 `retry: false`를 추가했다.
+  - 사용자 지시에 따라 실패 후 자동 요청 없이 `다시 시도` 버튼을 눌러야 목록이 다시 조회되는 흐름을 구현·테스트했다.
+  - 전역 화면 검색이 이전 렌더와 섞이는 것을 확인해 새 비동기 시나리오는 render container 안에서 조회하도록 보정했다.
+  - `Object.fromEntries` 단언이 TypeScript build 오류를 일으켜 `STAGES` 순회 초기화로 교체했다.
+- 기각:
+  - 별도 `ApplicantCard`·`StageColumn` 파일, 추가 상태 라이브러리, mock API/저장소 수정, PATCH·이동·상세·필터: 이번 scope에 불필요하거나 범위 밖이다.
+  - 조회 자동 재시도: 사용자의 명시적 재시도 기준과 충돌하므로 제거했다.
+
+#### 2. 자동 검증
+
+- RED 확인:
+  - selector 모듈 부재, ISO timestamp 날짜 표기, 503 뒤 재시도 버튼 부재를 각각 재현했다.
+- 실제 실행 결과:
+  - `npm run test -- src/features/recruitment-board/model/applicantSelectors.test.ts src/App.test.tsx` 통과 — 2개 파일, 4개 테스트.
+  - `npm run test -- src/App.test.tsx`에서 명시적 재시도 RED를 확인했다.
+  - `npm run test -- src/App.test.tsx src/features/recruitment-board/model/applicantSelectors.test.ts` 통과 — 2개 파일, 5개 테스트.
+  - `npm run lint` 통과.
+  - `npm run test` 통과 — 6개 파일, 39개 테스트.
+  - `npm run build` 통과.
+  - `git diff --check` 통과.
+- build는 500kB 초과 chunk 경고를 출력했다. 이번 scope에서는 code-splitting을 추가하지 않았다.
+
+#### 3. 수동 검증
+
+- 사용자 직접 수동 브라우저 검증 보고: 미검증.
+- 카드 클릭·상세 열기, 조회 실패 문구·접근 가능한 오류 안내, 로딩·전체 빈 상태: 미검증 및 후속 scope.
+
+#### 4. 알려진 한계
+
+- `다시 시도` 버튼만 사용자 지시로 최소 추가했다. 조회 오류 설명과 전체 상태 UI는 `ui-states` scope에서 완성한다.
+- 카드 본문 실행으로 상세를 여는 FR-02 수용 기준은 `detail-panel` scope에 남아 있다.
+- 검색·직무 필터가 적용된 카운트 갱신은 `search-filter` scope에 남아 있다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(card-list): 지원자 조회와 단계별 카드 표시 구현
+
+  - GET 응답을 TanStack Query cache로 읽고 STAGES 기준 순수 그룹화로 컬럼별 카드를 렌더링
+  - 카드에 이름·직무·YYYY.MM.DD 지원일·현재 단계를 표시하고 실제 카드 수를 컬럼 카운트에 연결
+  - 조회 자동 재시도를 끄고 실패 뒤 사용자 명시적 재시도로 목록을 다시 불러오게 보완
+  - 단계별 배치·날짜 표기·명시적 재시도 흐름을 테스트로 보호
+  ```
+
+- 상태: 미커밋
+
 ## 기능 기록 템플릿
 
 아래 블록을 기능마다 복사한다. 제출 전 빈 템플릿은 제거한다.
