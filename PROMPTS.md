@@ -821,6 +821,174 @@ AGENTS.md, PRD, TECH\_SPEC, IMPLEMENTATION\_AND\_COMMIT\_PLAN,
 
 - 해시: `04911c5`
 
+## [stage-move] 명시적 단계 변경과 mock API 저장
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-03
+- 완료 범위: 현재 단계를 제외한 select, 이동 button, PATCH 요청, 성공 응답의 TanStack Query cache 병합, 실패 피드백, mock 저장소 영속성 및 성공 응답 전 화면 유지 테스트
+- 제외 범위: 낙관적 업데이트·rollback, pending guard·동시 이동, 검색·필터·상세·전역 상태 UI, 새 라이브러리, 커밋
+
+### 프롬프트 1 — 최초 지시
+
+```text
+mock-api·card-list 완료 확인 후
+AGENTS.md와 docs/PRD.md, docs/TECH_SPEC.md,
+docs/IMPLEMENTATION_AND_COMMIT_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 코드를 읽어라.
+
+이번 작업 scope는 stage-move 하나뿐이다.
+연결 요구사항은 FR-03이다.
+
+완료 기준:
+- 카드마다 현재 단계를 제외한 다른 단계를 선택할 수 있다.
+- 선택한 단계로 이동 버튼을 실행할 수 있다.
+- PATCH /api/applicants/:id/stage를 호출한다.
+- API 성공 뒤 반환된 Applicant를 TanStack Query cache에 반영한다.
+- 새로고침 뒤에도 성공한 이동 결과가 유지된다.
+- 현재 단계 제출은 불가능하다.
+- 실패 시 저장소는 변경되지 않고, 사용자가 인지할 수 있는 기본 피드백을 제공한다.
+
+이번 작업에서 하지 않을 것:
+- 낙관적 업데이트와 실패 롤백
+- 동일 카드 pending guard 및 동시 이동 처리
+- 검색·필터, 상세 패널, 로딩·오류·빈 상태 전반
+- 범위 밖 리팩터링, 새 라이브러리 추가, 커밋
+
+제약:
+- Applicant 목록은 TanStack Query cache를 단일 진실 공급원으로 사용한다.
+- 명시적 stage select와 이동 button을 사용한다.
+- 현재 stage는 select 옵션에서 제외한다.
+- 성공 전 화면 변경은 다음 optimistic-update scope에서 구현한다.
+- 카드 상세 버튼과 이동 컨트롤을 중첩하지 않는다.
+- 기존 mock API·도메인 타입·stage 상수를 재사용한다.
+- 관련 없는 파일은 수정하지 않는다.
+
+편집 전에 다음을 출력해라.
+1. 재사용할 현재 코드
+2. 수정·생성할 파일과 책임
+3. 성공/실패 데이터 흐름
+4. 현재 단계 제출, API 실패, 새로고침의 검증 시나리오
+5. 먼저 실패를 확인할 테스트 또는 재현 시나리오
+6. 범위를 넘는 제안
+
+그 뒤 stage-move 범위만 최소 구현해라.
+구현 후 변경 파일, diff 요약, 실제 실행한 명령과 결과, 수동 검증 항목,
+알려진 한계를 보고하고 멈춰라. 커밋하지 마라.
+```
+
+### 후속 프롬프트 2 — 미커밋 diff 리뷰
+
+```text
+현재 브랜치의 미커밋 diff를 리뷰해라. 파일은 수정하지 마라.
+
+대상 scope는 stage-move이고 연결 요구사항은 FR-03이다.
+
+우선 확인할 사항:
+1. PATCH /api/applicants/:id/stage 요청과 응답 병합이 정확한가
+2. 현재 단계가 선택·제출될 수 없는가
+3. 성공한 이동이 localStorage mock 저장소에 남아 새로고침 후 유지되는가
+4. 실패 시 저장소가 변경되지 않는가
+5. 성공 전 UI를 바꾸는 낙관적 업데이트가 섞이지 않았는가
+6. TanStack Query cache 외에 지원자 목록 복제 상태가 생기지 않았는가
+7. 카드 상세 컨트롤과 이동 컨트롤이 중첩되지 않았는가
+8. 불필요한 의존성·추상화·범위 밖 변경이 없는가
+9. 테스트가 통과해도 놓칠 반례가 있는가
+
+각 지적은 아래 형식으로 작성해라.
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 왜 문제인지
+- 최소 수정안
+
+지적할 문제가 없으면, 확인한 범위와 아직 검증하지 못한 범위를 구분해라.
+```
+
+### 후속 프롬프트 3 — 영속성과 비낙관적 이동 테스트 보강
+
+```text
+저장된 결과가 앱을 다시 열어도 남는가, 저장 성공 전에는 화면을 미리 바꾸지 않는가를 증명하는 테스트 보강이 필요하다
+현재 stage-move 미커밋 diff는 유지하고, 테스트만 최소 보강해라.
+파일 수정 전 변경 계획과 테스트 시나리오를 먼저 설명해라.
+
+보완 목표는 두 가지다.
+
+1. 실제 MSW PATCH handler와 localStorage를 사용하는 흐름에서:
+   - 카드 이동 성공
+   - 앱을 다시 렌더링하거나 새로고침과 같은 GET 재조회
+   - 변경된 단계가 계속 보임
+   을 확인하는 통합 테스트를 추가해라.
+
+2. PATCH 응답을 지연시키는 테스트에서:
+   - 이동 버튼 실행 직후 카드는 아직 기존 컬럼에 남아 있어야 한다.
+   - PATCH 성공 응답 뒤에만 목표 컬럼으로 이동해야 한다.
+   를 확인해라.
+
+제약:
+- optimistic update, rollback, pending guard, 새 라이브러리는 추가하지 마라.
+- 실제 mock API handler와 TanStack Query cache를 사용해라.
+- 테스트용 handler가 응답만 흉내 내고 localStorage를 우회하지 않게 해라.
+- 기존 stage-move 범위 밖 리팩터링 금지.
+- 구현 후 focused test, npm run lint, npm run test, npm run build 결과를 보고하고 멈춰라. 커밋하지 마라.
+```
+
+### AI 출력 요지
+
+- 카드별 native select와 이동 form을 추가하고, 현재 단계는 option에서 제외했다.
+- `PATCH /api/applicants/:id/stage` 성공 응답의 Applicant 한 건만 `['applicants']` Query cache에 병합했다.
+- 실패 시 cache를 변경하지 않고 기본 `role="alert"` 피드백을 표시했다.
+- 실제 MSW handler와 `localStorage`를 사용하는 재렌더링 영속성 테스트, 지연 PATCH 동안 기존 컬럼을 유지하는 테스트를 추가했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독·리뷰
+
+- 유지:
+  - 기존 mock API handler, Applicant 타입, STAGES, TanStack Query cache를 재사용했다.
+  - 카드 목록 복제 state 없이 query 결과만 단계별로 렌더링했다.
+- 기각:
+  - `onMutate` 기반 낙관적 업데이트, rollback, pending guard, 동시 이동 제어, 새 라이브러리.
+- 확인:
+  - PATCH 성공 전에는 cache를 변경하지 않으며, 성공 콜백에서만 응답 엔티티를 병합한다.
+  - 현재 단계는 select option에서 제외하고 submit handler도 방어한다.
+  - 실제 handler의 실패는 저장 전 반환되므로 localStorage를 바꾸지 않는다.
+
+#### 2. 자동 검증
+
+- 최초 이동 UI 테스트는 이동 form이 없어 실패하는 것을 확인한 뒤 구현했다.
+- 테스트 보강 첫 실행은 `getByRole(...).findByRole` 사용 오류와 정리 누락으로 실패했고, scoped query 호출과 테스트 후 정리로 수정했다.
+- `npm run test -- src/App.test.tsx` 통과 — 8개 테스트.
+- `npm run lint` 통과.
+- `npm run test` 통과 — 6개 파일, 43개 테스트.
+- `npm run build` 통과.
+- `git diff --check` 통과.
+- build는 500kB 초과 chunk 경고를 출력했으며, 이번 scope에서 code-splitting은 추가하지 않았다.
+
+#### 3. 수동 검증
+
+- 사용자 직접 수동 브라우저 검증 보고: 완료.
+
+#### 4. 알려진 한계
+
+- 현재 단계 외 모든 단계로의 이동을 허용한다. 다음 단계로만 제한하는 흐름은 확장·고도화 시 재검토한다.
+- 성공 전 즉시 카드 이동, 실패 rollback, 동일 카드 pending guard와 동시 이동 처리는 `optimistic-update` scope에 남긴다.
+- 카드 상세 버튼은 아직 없으며, 향후 추가돼도 이동 form과 중첩하지 않는다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(stage-move): 명시적 단계 변경과 mock API 저장
+
+  - PATCH 요청으로 변경 단계를 mock 저장소에 영속화
+  - 성공 응답을 Query cache에 반영
+  - 낙관적 업데이트와 경쟁 상태 처리는 다음 scope로 분리
+  ```
+
+- 상태: 미커밋
+- AI 초안 수정 요약: 응답만 흉내 낸 PATCH 테스트를 실제 MSW handler·localStorage 재조회 테스트로 보강했다.
+
 ## 기능 기록 템플릿
 
 아래 블록을 기능마다 복사한다. 제출 전 빈 템플릿은 제거한다.
