@@ -130,8 +130,112 @@ PROMPTS.md 작성 및 자동화는 제외하고
 
 ### 연결 커밋
 
-- 예정 메시지: `docs(00-planning-review): 과제 요구사항과 구현 기준 검토`
+- 메시지: `docs(00-planning-review): 과제 요구사항과 구현 기준 검토`
+- 해시: `d907088`
+
+## [project-setup] React TypeScript 프로젝트와 품질 도구 초기화
+
+### 목표 / 수용 기준
+
+- 연결 근거: D-001, 구현·커밋 계획 Commit 02
+- 이번 기능에서 완료할 범위:
+  - Vite 기반 React + TypeScript 앱 초기화
+  - TanStack Query provider 연결
+  - ESLint, Vitest, React Testing Library, MSW Node server 테스트 기반 설정
+  - 기본 예제 제거 및 빈 app shell 렌더링
+- 이번 기능에서 하지 않을 범위:
+  - Applicant 도메인 타입·stage 상수
+  - MSW API handler·localStorage 저장소
+  - 보드·카드·검색·단계 이동 UI
+  - 커밋
+
+### 프롬프트 1 — 최초 지시
+
+AGENTS.md와 아래를 읽고 작업. 참고: 이번 작업 scope는 project-setup 하나뿐이다.
+
+목표:
+
+- Vite React TypeScript 프로젝트 초기화
+- 기본 예제 제거
+- TanStack Query provider 연결
+- Vitest + React Testing Library + MSW Node 테스트 기반 설정
+- lint, test, build가 통과하는 빈 app shell 구성
+
+금지:
+
+- Applicant 도메인 타입 작성
+- mock API handler 작성
+- 보드/카드 UI 작성
+- 검색, 단계 이동 등 다음 기능 선행 구현
+- 커밋 실행
+
+편집 전에 먼저 다음을 출력해라.
+
+1. 생성·수정할 파일
+2. 각 파일 책임
+3. 실행할 검증 명령
+4. project-setup 범위를 넘어갈 위험
+
+그 뒤 최소 구현을 수행하고 실제 lint/test/build 결과와 변경 파일을 보고한 뒤 멈춰라.
+
+### AI 출력 요지
+
+- Vite React TypeScript 기반을 만들고, 기본 예제 화면·자산 대신 제목만 있는 app shell로 교체했다.
+- `src/main.tsx`에 단일 `QueryClient`와 `QueryClientProvider`를 연결했다.
+- Vitest는 `src/**/*.{test,spec}.{ts,tsx}`만 수집하고, jsdom·RTL matcher·MSW Node server lifecycle을 설정했다.
+- `App.test.tsx`에서 Query provider 아래 app shell 제목 렌더링을 확인했다.
+- Vite 기본 `oxlint` 설정은 계획에 맞춰 ESLint 설정으로 교체했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독
+
+- 유지:
+  - 지원자 원본 상태를 두지 않고 Query provider만 연결했다.
+  - MSW Node server는 빈 handler 배열로만 구성해 다음 `mock-api` scope를 선행하지 않았다.
+  - 테스트 수집 범위를 `src/`로 제한해 저장소의 `.codex` hook 및 의존성 내부 테스트를 실행하지 않도록 했다.
+- 수정:
+  - 기본 Vite 예제 자산·카운터·문서 링크를 제거하고 빈 shell로 축소했다.
+  - `exclude`만 지정하면 Vitest 기본 제외 목록을 덮어써 `node_modules` 테스트가 수집되는 것을 확인했다. 앱 테스트만 수집하는 `include` 설정으로 교체했다.
+- 범위 외로 남김:
+  - Applicant 타입, mock API handler, 보드·카드 UI, 검색, 단계 이동.
+
+#### 2. 자동 검증
+
+- 실행 명령:
+  - `git diff --check`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run build`
+- 실제 결과:
+  - diff whitespace 오류 없음.
+  - lint 통과.
+  - Vitest: 1개 파일, 1개 테스트 통과.
+  - production build 통과.
+- 실패한 테스트와 원인:
+  - 설정 중 `.codex/hooks`와 `node_modules` 내부 테스트가 수집되어 실패했다.
+  - 원인은 Vitest의 기본 제외 목록을 대체한 `exclude` 설정이었다.
+  - `src/` 테스트만 수집하도록 변경한 후 전체 테스트가 통과했다.
+
+#### 3. 수동 검증
+
+- 검증: `npm install`, `npm run dev` 실행
+- `npm run lint`: 통과
+- `npm run test`: 통과
+- `npm run build`: 통과
+- `git diff --check`: 통과
+
+#### 4. 최종 판단
+
+- 수정 후 채택.
+- 내가 자동 검증으로 확인한 범위: Vite build, ESLint, app shell 렌더링 테스트, MSW Node server lifecycle 설정.
+- 미검증 또는 남은 위험: 실제 브라우저 렌더링·콘솔 상태는 사용자 확인이 필요하다. MSW handler와 실제 API 동작은 다음 scope에서 구현·검증한다.
+
+### 연결 커밋
+
+- 예정 메시지: `chore(project-setup): React TypeScript 프로젝트와 품질 도구 초기화`
 - 상태: 미커밋
+- AI 초안 수정 요약: Vite 기본 예제와 oxlint 구성을 제거하고, 빈 shell 및 ESLint·Vitest 기반으로 축소했다.
 
 ## 기능 기록 템플릿
 
