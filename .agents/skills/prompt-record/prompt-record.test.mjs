@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -11,6 +11,8 @@ const scriptPath = join(
   'scripts',
   'read-prompt-log.mjs',
 )
+const skillPath = join(dirname(fileURLToPath(import.meta.url)), 'SKILL.md')
+const promptsPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'PROMPTS.md')
 
 async function createWorkspace(logs) {
   const workspace = await mkdtemp(join(tmpdir(), 'prompt-record-skill-'))
@@ -63,4 +65,17 @@ test('fails instead of selecting another log when the requested file is missing'
   assert.equal(result.status, 1)
   assert.match(result.stderr, /Prompt log not found for session: missing/)
   assert.doesNotMatch(result.stdout, /side conversation/)
+})
+
+test('requires full commit-message backfill and a body-bearing planned-message template', async () => {
+  const [skill, prompts] = await Promise.all([
+    readFile(skillPath, 'utf8'),
+    readFile(promptsPath, 'utf8'),
+  ])
+
+  assert.match(skill, /git show -s --format=%B <short-hash>/)
+  assert.match(skill, /제목·본문·해시/)
+  assert.match(prompts, /- 예정 메시지:/)
+  assert.match(prompts, /- 무엇:/)
+  assert.match(prompts, /- 왜:/)
 })

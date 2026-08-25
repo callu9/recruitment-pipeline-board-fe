@@ -575,7 +575,16 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md와 현재 코드를 읽�
 
 ### 연결 커밋
 
-- 메시지: `type(feature-scope): 요약`
+- 예정 메시지:
+
+  ```text
+  type(feature-scope): 요약
+
+  - 무엇:
+  - 왜:
+  ```
+
+- 상태: 미커밋
 - AI 초안 수정 요약: 한 줄
 ```
 
