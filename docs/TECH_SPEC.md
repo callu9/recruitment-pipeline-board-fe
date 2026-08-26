@@ -46,9 +46,9 @@ flowchart LR
 2. `useApplicantsQuery`가 `GET /api/applicants`를 호출한다.
 3. MSW handler가 200~800ms 지연과 실패 여부를 결정한다.
 4. 성공 시 `mockDb`에서 데이터를 읽어 반환한다.
-5. 단계 이동 시 Query cache를 먼저 수정한다.
-6. `PATCH /api/applicants/:id/stage`가 성공하면 응답 엔티티를 캐시에 병합한다.
-7. 실패하면 해당 지원자의 이전 엔티티만 캐시에 복원한다.
+5. 이동 submit은 확인 dialog를 열고, 확인 전에는 mutation을 호출하지 않는다.
+6. 확인 시 Query cache를 먼저 수정하고 `PATCH /api/applicants/:id/stage`를 호출한다.
+7. 성공하면 응답 엔티티를 캐시에 병합하고, 실패하면 해당 지원자의 이전 엔티티만 복원한다.
 
 ## 2. 권장 폴더 구조
 
@@ -313,6 +313,7 @@ const DEFAULT_FAILURE_RATE = 0.15;
 | 이름 검색어 | `RecruitmentBoard` 로컬 state | 현재 화면에서만 사용 |
 | 직무 필터 | `RecruitmentBoard` 로컬 state | 현재 화면에서만 사용 |
 | 선택 지원자 ID | `RecruitmentBoard` 로컬 state | 상세 패널 열림 상태 |
+| 단계 변경 확인 대기 | 보드 수준 로컬 state의 applicantId·targetStage | 확인 전 요청을 막고 dialog 표시 정보만 식별 |
 | 성공·진행 알림 | 보드 수준 로컬 state | 최근 상태 메시지 |
 | 실패 알림 | 보드 수준 로컬 state | 성공 메시지가 실패를 즉시 덮지 않도록 별도 보관 |
 
@@ -519,6 +520,7 @@ export function groupApplicantsByStage(
 
 - 현재 단계에서 허용된 다음 단계만 옵션으로 제공
 - 선택되지 않았거나 현재 단계이면 submit 불가
+- submit은 상위에 확인 요청을 전달하며, 실제 mutation은 확인 handler에서만 실행
 - pending이면 select와 button 비활성화
 - 이벤트가 카드 상세 열기로 전파되지 않도록 구조적으로 분리
 
@@ -531,6 +533,13 @@ export function groupApplicantsByStage(
 - 닫은 뒤 trigger focus 복귀 검증
 - 열고 닫는 동안 검색어, 직무 필터, 보드 스크롤 상태를 변경하지 않음
 - 상세 패널 내부에서 단계 이동은 Must에 포함하지 않음. 카드의 이동 흐름을 단일화한다.
+
+### `StageChangeConfirmationDialog`
+
+- native `<dialog>`와 `showModal()`을 사용하고 제목을 `aria-labelledby`로 연결
+- 지원자명·현재 단계·변경 단계를 사람이 읽는 라벨로 표시
+- 취소 button과 Esc는 dialog만 닫고 trigger로 focus를 복귀하며 cache·localStorage·mutation을 변경하지 않음
+- 확인 handler만 기존 `useMoveApplicantStage.move()`를 호출하며, 새 modal abstraction이나 전역 상태는 만들지 않음
 
 ### `BoardStatus`
 
@@ -592,8 +601,8 @@ export function groupApplicantsByStage(
 ### 12.2 핵심 통합 테스트
 
 1. **낙관적 이동 성공**
-   - PATCH 응답을 제어된 promise로 지연한다.
-   - 이동 버튼 실행 직후 API resolve 전 목표 컬럼에서 카드를 찾는다.
+   - 이동 버튼 실행 후 확인 dialog가 열리고 PATCH가 아직 호출되지 않았는지 확인한다.
+   - 확인 후 PATCH 응답을 제어된 promise로 지연하고, API resolve 전 목표 컬럼에서 카드를 찾는다.
    - resolve 후 목표 컬럼 유지와 성공 알림을 확인한다.
 
 2. **실패 롤백**
@@ -629,6 +638,11 @@ export function groupApplicantsByStage(
    - Enter로 dialog를 연다.
    - Esc로 닫고 포커스가 trigger로 돌아오는지 확인한다.
    - 검색·필터 적용과 보드 스크롤 뒤 dialog를 열고 닫아 기존 맥락이 유지되는지 확인한다.
+
+9. **단계 변경 확인**
+   - dialog의 지원자명·현재 단계·변경 단계, `aria-labelledby`, 취소 button을 확인한다.
+   - 취소와 Esc 후 PATCH 0회, Query cache·localStorage 불변, 이동 button focus 복귀를 확인한다.
+   - 확인 후에만 PATCH 1회와 기존 optimistic update·rollback·pending guard·다른 카드 병렬 처리가 시작되는지 확인한다.
 
 ### 12.3 mock 설정 테스트
 

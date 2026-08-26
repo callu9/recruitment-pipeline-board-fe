@@ -104,7 +104,8 @@
   gap: 0.25rem;
 }
 
-:global(body):has(.detailDialog[open]) {
+:global(body):has(.detailDialog[open]),
+:global(body):has(.confirmationDialog[open]) {
   overflow: hidden;
 }
 
@@ -155,4 +156,27 @@
 
 .detailList dd {
   margin: 0;
+}
+
+.confirmationDialog {
+  width: min(28rem, calc(100% - 2rem));
+  padding: 1.5rem;
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(23 32 51 / 20%);
+}
+
+.confirmationDialog::backdrop {
+  background: rgb(23 32 51 / 35%);
+}
+
+.confirmationDialog h2 {
+  margin-top: 0;
+}
+
+.confirmationActions {
+  display: flex;
+  justify-content: end;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
 }

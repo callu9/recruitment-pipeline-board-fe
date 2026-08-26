@@ -6,6 +6,7 @@ import App from './App'
 import styles from './App.module.css'
 import type { Applicant } from './features/recruitment-board/model/applicant.types'
 import { resetMockApiTestConfig, setMockApiTestConfig } from './mocks/mockConfig'
+import { STORAGE_KEY } from './mocks/mockDb'
 import { server } from './test/server'
 
 if (!HTMLDialogElement.prototype.showModal) {
@@ -19,6 +20,83 @@ afterEach(() => {
   cleanup()
   localStorage.clear()
   resetMockApiTestConfig()
+})
+
+function confirmStageChange() {
+  fireEvent.click(screen.getByRole('button', { name: '확인' }))
+}
+
+test('cancelling a stage-change confirmation leaves the applicant state unchanged and restores focus', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-confirmation', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([applicant]))
+  let patchRequests = 0
+  server.use(http.patch('*/api/applicants/:applicantId/stage', () => {
+    patchRequests += 1
+    return new Promise<Response>(() => undefined)
+  }))
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { container } = render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>)
+
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
+  const moveForm = within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })
+  const moveButton = within(moveForm).getByRole('button', { name: '이동' })
+  const cacheBefore = queryClient.getQueryData<Applicant[]>(['applicants'])
+  const storageBefore = localStorage.getItem(STORAGE_KEY)
+
+  moveButton.focus()
+  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
+  fireEvent.click(moveButton)
+
+  const dialog = await screen.findByRole('dialog', { name: '김민지 단계 변경 확인' })
+  expect(dialog).toHaveAttribute('open')
+  expect(dialog).toHaveAttribute('aria-labelledby')
+  expect(within(dialog).getByText('현재 단계: 서류검토')).toBeInTheDocument()
+  expect(within(dialog).getByText('변경 단계: 면접')).toBeInTheDocument()
+  expect(patchRequests).toBe(0)
+  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
+  expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
+
+  fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(patchRequests).toBe(0)
+  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
+  expect(moveButton).toHaveFocus()
+})
+
+test('Escape cancels a stage-change confirmation without a PATCH request', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-escape', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
+    stage: 'INTERVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
+  }
+  let patchRequests = 0
+  server.use(
+    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
+    http.patch('*/api/applicants/:applicantId/stage', () => {
+      patchRequests += 1
+      return HttpResponse.json({ ...applicant, stage: 'OFFER' })
+    }),
+  )
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { container } = render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>)
+  const interviewColumn = await within(container).findByRole('region', { name: '면접' })
+  const moveForm = within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })
+  const cacheBefore = queryClient.getQueryData<Applicant[]>(['applicants'])
+  const storageBefore = localStorage.getItem(STORAGE_KEY)
+
+  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'OFFER' } })
+  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
+  const dialog = await screen.findByRole('dialog', { name: '이준호 단계 변경 확인' })
+  fireEvent(dialog, new Event('cancel', { cancelable: true }))
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(patchRequests).toBe(0)
+  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
 })
 
 test('opens applicant details and restores the trigger focus when the dialog closes', async () => {
@@ -255,6 +333,7 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
 
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
 
   expect(await within(interviewColumn).findByText('김민지')).toBeInTheDocument()
   expect(requestBody).toEqual({ stage: 'INTERVIEW' })
@@ -298,6 +377,7 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '지원자 001 단계 이동' })
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
   await within(await within(firstRender.container).findByRole('region', { name: '면접' })).findByRole('heading', {
     name: '지원자 001',
   })
@@ -339,6 +419,7 @@ test('moves an applicant to the target column before a delayed stage PATCH succe
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
 
   expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
   expect(within(documentReviewColumn).queryByRole('heading', { name: '김민지' })).not.toBeInTheDocument()
@@ -384,6 +465,7 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
 
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
 
   expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
   resolveFailure(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
@@ -423,12 +505,13 @@ test('restores only the failed applicant when another applicant move succeeds', 
   const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const aForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
+  fireEvent.change(within(aForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
+  fireEvent.click(within(aForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
   const bForm = within(documentReviewColumn).getByRole('form', { name: '이준호 단계 이동' })
-
-  for (const form of [aForm, bForm]) {
-    fireEvent.change(within(form).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-    fireEvent.click(within(form).getByRole('button', { name: '이동' }))
-  }
+  fireEvent.change(within(bForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
+  fireEvent.click(within(bForm).getByRole('button', { name: '이동' }))
+  confirmStageChange()
 
   expect(await within(interviewColumn).findByText('이준호')).toBeInTheDocument()
   expect(within(interviewColumn).getByText('김민지')).toBeInTheDocument()
@@ -466,7 +549,9 @@ test('blocks a rapid second move for the same applicant while its PATCH is pendi
   fireEvent.change(within(form).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
 
   fireEvent.submit(form)
-  fireEvent.submit(form)
+  const confirmationButton = screen.getByRole('button', { name: '확인' })
+  fireEvent.click(confirmationButton)
+  fireEvent.click(confirmationButton)
 
   expect(within(form).getByLabelText('이동할 단계')).toBeDisabled()
   expect(within(form).getByRole('button', { name: '이동' })).toBeDisabled()

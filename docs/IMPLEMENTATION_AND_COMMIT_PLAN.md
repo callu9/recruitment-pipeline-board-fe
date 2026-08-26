@@ -22,6 +22,7 @@
 | §2.6 로딩·오류·빈 상태 | FR-07 | §7, §11 | `ui-states` | D-006 | 구현 범위 > Must |
 | §3 경쟁 상태 | FR-08 | §8 | `optimistic-update` | D-005, D-007 | 구현 범위 > Should |
 | 단방향 단계 전이 정책 | FR-03 | §3, §4, §8 | `stage-transition-policy` | D-011 | 구현 범위 > Must |
+| 단계 변경 최종 확인 | FR-03 | §1, §6, §10, §12 | `stage-change-confirmation` | D-012 | 구현 범위 > Must |
 | §3 Undo | FR-09 | 운영 정책상 기각 | 없음 | D-011 | 기각 범위 |
 | §3 1,000건 성능 | FR-10 | 활성 범위 제외 | 없음 | D-006 | 제외 범위 |
 | §3 웹 접근성 | FR-11 | §10, §11 | `board-layout`, `card-list`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`; 결함 수정 시 `a11y-keyboard` | D-002 | 구현 범위 > Should |
@@ -370,9 +371,32 @@ AI 기록:
 - 실제 수정 커밋이 생길 때만 `[a11y-keyboard]`를 작성한다.
 - 수정할 결함이 없으면 감사 결과를 `[submission-review]`에 기록한다.
 
+### Commit 13 — 단계 변경 최종 확인
+
+```text
+feat(stage-change-confirmation): 단계 변경 전 최종 확인 추가
+```
+
+범위:
+
+- 연결 요구사항: FR-03; FR-04, FR-08, FR-11 회귀 보호
+- `StageMoveForm` submit은 확인 요청만 전달하고, native confirmation dialog의 확인 handler만 기존 mutation을 호출
+- 취소·Esc는 cache와 localStorage를 변경하지 않고 이동 button focus를 복귀
+- 종료 상태에는 기존처럼 이동 form과 dialog 진입점이 없음
+
+검증:
+
+- dialog 표시 내용·`aria-labelledby`·`showModal()`과 확인 전 PATCH 0회
+- 취소·Esc의 PATCH/cache/localStorage 불변과 focus 복귀
+- 확인 후 optimistic update·PATCH 실패의 엔티티 단위 rollback·동일 카드 guard·다른 카드 병렬 이동 회귀
+
+AI 기록:
+
+- `[stage-change-confirmation]`
+
 여기까지를 Must + 핵심 가점 완료선으로 본다.
 
-### Commit 13 — 제출 문서 정리
+### Commit 14 — 제출 문서 정리
 
 ```text
 docs(submission-review): 실행·검증 방법과 설계 결정 최종 정리

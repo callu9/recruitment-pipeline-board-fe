@@ -2358,6 +2358,246 @@ AGENTS.md와 다음 문서를 지정된 순서로 읽어라.
 
 - 해시: 최종 동기화 대기
 
+## [stage-change-confirmation] 단계 변경 전 최종 확인
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-03; FR-04, FR-08, FR-11 회귀 보호
+- 허용된 단계 이동도 PATCH 전에 native confirmation dialog에서 최종 확인한다.
+- 취소·Esc는 Query cache와 localStorage를 변경하지 않고, 확인 뒤에는 기존 optimistic move 흐름을 사용한다.
+
+### 프롬프트 1 — 단계 변경 확인 구현
+
+```text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH_SPEC.md
+4. docs/IMPLEMENTATION_AND_COMMIT_PLAN.md
+5. PROMPTS.md의 현재 stage-change-confirmation 섹션
+6. 최근 stage-transition-policy 커밋과 관련 현재 코드
+
+이번 작업 scope는 stage-change-confirmation 하나뿐이다.
+연결 요구사항은 FR-03이며, FR-04·FR-08·FR-11의 기존 동작이 깨지지 않아야 한다.
+
+변경 배경:
+
+단계 변경이 향후 지원자 알림 같은 외부 동작으로 연결될 수 있다.
+일반 채용담당자의 실수로 잘못된 알림이 발생하는 것을 줄이기 위해,
+허용된 단계 전이라도 실제 PATCH 요청 전에 명시적인 최종 확인을 받는다.
+
+확정 동작:
+
+1. 사용자가 카드에서 허용된 목표 단계를 선택한다.
+2. 이동 버튼을 실행한다.
+3. 이 시점에는 move()를 호출하지 않는다.
+4. 지원자명·현재 단계·변경 단계가 표시된 확인 dialog를 연다.
+5. 확인을 실행한 경우에만 기존 move(applicantId, targetStage)를 호출한다.
+6. 확인 이후 기존 낙관적 업데이트, PATCH, rollback, pending guard 흐름을 그대로 사용한다.
+7. 취소 button 또는 Esc로 닫으면 Query cache와 localStorage를 변경하지 않는다.
+8. 취소 뒤 포커스를 확인 dialog를 열었던 이동 button으로 복귀시킨다.
+9. HIRED와 REJECTED에는 이동 form이 없으므로 확인 dialog 진입점도 없다.
+
+완료 기준:
+
+- 네이티브 <dialog>와 showModal()을 사용한다.
+- dialog 제목을 aria-labelledby로 연결한다.
+- 지원자 이름, 현재 단계, 변경 단계를 사람이 읽을 수 있는 라벨로 표시한다.
+- 확인 button과 취소 button을 제공한다.
+- Esc는 취소와 동일하게 처리한다.
+- dialog를 열기 전에는 move(), fetch, mutation.mutate를 호출하지 않는다.
+- dialog를 열거나 취소하는 것만으로 TanStack Query cache가 변경되지 않는다.
+- dialog를 열거나 취소하는 것만으로 localStorage가 변경되지 않는다.
+- 확인 직후에만 기존 낙관적 업데이트가 시작된다.
+- 확인 후 PATCH 실패 시 기존 엔티티 단위 rollback을 유지한다.
+- 확인 후 동일 카드 중복 요청은 기존 synchronous pending guard로 차단한다.
+- 서로 다른 지원자의 이동은 기존처럼 병렬 처리할 수 있다.
+- 종료 상태에는 이동 form과 확인 dialog 진입점이 없다.
+- 새 모달·상태 관리 라이브러리를 추가하지 않는다.
+
+최소 구현 원칙:
+
+- 기존 ApplicantDetailDialog의 native dialog 사용 방식을 참고하되, 상세 dialog와 확인 dialog를 위한 범용 modal abstraction은 만들지 않는다.
+- 기존 StageMoveForm과 useMoveApplicantStage를 재사용한다.
+- mutation hook 내부에 확인 UI 책임을 넣지 않는다.
+- StageMoveForm submit은 확인 요청을 상위에 전달하고, 실제 move() 호출은 확인 handler에서만 수행한다.
+- 확인 대기 상태는 필요한 applicantId와 targetStage만 보관한다.
+- 기존 stage 전이 정책을 다시 구현하거나 복제하지 않는다.
+- 관련 없는 App 구조 분리나 컴포넌트 리팩터링을 하지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx
+  - 확인 대기 상태
+  - StageChangeConfirmationDialog
+  - 확인 후 move() 호출 흐름
+- src/App.module.css
+  - 필요한 경우 기존 dialog 스타일을 재사용한 최소 확인 dialog 스타일
+- src/App.test.tsx
+  - 확인 전·취소·확인·회귀 테스트
+- docs/PRD.md
+  - FR-03과 단계 이동 성공·실패 흐름에 확인 단계를 추가
+- docs/TECH_SPEC.md
+  - 확인 dialog 책임과 mutation 실행 전 흐름 명시
+- docs/IMPLEMENTATION_AND_COMMIT_PLAN.md
+  - stage-change-confirmation scope와 검증 항목 추가
+- DECISIONS.md
+  - 단계 변경 확인을 채택한 이유와 범위 기록
+- README.md
+  - 사용자 관점의 단계 변경 확인 동작 반영
+- PROMPTS.md는 사용자 검증 gate 통과 전에는 수정하지 않음
+- docs/ASSIGNMENT.md는 원문이므로 수정하지 않음
+
+DECISIONS.md에는 다음 결정을 기록한다.
+
+- 모든 허용된 단계 변경은 실제 요청 전에 채용담당자의 확인을 받는다.
+- 목적은 향후 지원자 알림 같은 외부 동작과 잘못된 상태 변경의 위험을 줄이는 것이다.
+- 확인 dialog는 안전장치이며 실제 알림 발송이나 감사 로그를 구현하지 않는다.
+- 취소·Esc는 아무 상태도 변경하지 않는다.
+- 확인 후에는 검증된 기존 move() 흐름을 재사용한다.
+- window.confirm, 새 dialog 라이브러리, 전역 확인 상태는 사용하지 않는다.
+- 관리자 상태 정정, 알림 발송 실패 정책, 감사 로그는 향후 별도 scope다.
+
+이번 작업에서 하지 않을 것:
+
+- 실제 지원자 알림 발송
+- 관리자 전용 상태 정정
+- 감사 로그
+- Undo
+- stage 전이 정책 변경
+- seed 데이터 변경
+- 리디자인·반응형·성능 개선
+- 범용 dialog 시스템
+- 관련 없는 리팩터링
+- 커밋
+- 사용자 검증 전 PROMPTS.md 수정이나 staging
+
+편집 전에 먼저 다음을 출력해라.
+
+1. 요구사항 ID
+2. 재사용할 현재 코드와 기존 dialog 패턴
+3. 생성·수정할 파일과 책임
+4. 확인 대기 상태의 최소 데이터 구조
+5. submit → dialog → confirm/cancel → move 흐름
+6. Query cache와 localStorage 불변을 확인할 시나리오
+7. 먼저 실패시킬 테스트
+8. 범위를 넘는 제안과 제외 이유
+
+테스트를 먼저 작성해 현재 동작에서 실패하는지 확인한 뒤 최소 구현해라.
+
+필수 자동 검증:
+
+- 이동 button 실행 시 dialog가 열리고 PATCH는 0회
+- dialog에 지원자명·현재 단계·변경 단계 표시
+- dialog가 열린 동안 카드가 기존 컬럼에 유지
+- 취소 button 후 PATCH 0회
+- Esc 후 PATCH 0회
+- 취소·Esc 후 Query cache 불변
+- 취소·Esc 후 localStorage 불변
+- 취소 후 원래 이동 button으로 포커스 복귀
+- 확인 button 실행 후 PATCH 1회
+- 확인 직후 응답 전 목표 컬럼으로 낙관적 이동
+- 확인 후 PATCH 실패 시 이전 applicant 한 건만 rollback
+- 동일 카드 빠른 확인 중복 시 기존 pending guard 유지
+- 서로 다른 카드의 확인된 이동은 병렬 처리 가능
+- HIRED와 REJECTED에는 확인 dialog 진입점 없음
+- 기존 직접 API 전이 정책 검증 유지
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+자동 검증 후 변경 파일, unstaged diff, 실제 명령 결과, 수용 기준 충족 여부, 알려진 한계와 사용자 수동 검증 시나리오를 보고하고 기다려라.
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는 prompt-record, staging, commit을 진행하지 마라.
+```
+
+### 프롬프트 2 — 사용자 검증 후 읽기 전용 리뷰
+
+```text
+“두 요청이 실제로 동시에 pending”인 상태를 사람이 재현·검증하기 어렵기 때문에 이 항목은 자동 테스트로만 검증 근거를 삼아야 하고 수동 검증 목록에서는 제외. 나머지 수동 검증 모두 검증 완료.
+
+현재 브랜치의 stage-change-confirmation 미커밋 diff를 읽기 전용으로 리뷰해라.
+파일은 수정하지 마라.
+
+연결 요구사항은 FR-03이며 FR-04, FR-08, FR-11 회귀도 확인한다.
+
+우선순위:
+
+1. 이동 form submit이 move()를 직접 호출하지 않는가
+2. 확인 전 PATCH, mutation, Query cache 변경이 전혀 없는가
+3. 취소와 Esc가 Query cache와 localStorage를 변경하지 않는가
+4. 확인한 경우에만 기존 move()를 정확히 한 번 호출하는가
+5. 확인 직후 기존 낙관적 업데이트가 시작되는가
+6. 실패 시 previousApplicant 한 건만 rollback하는 기존 흐름이 유지되는가
+7. pendingIdsRef의 동일 카드 synchronous guard가 유지되는가
+8. 서로 다른 지원자는 계속 병렬 이동할 수 있는가
+9. dialog가 지원자명·현재 단계·목표 단계의 사람이 읽을 수 있는 라벨을 표시하는가
+10. aria-labelledby, 확인·취소 이름, Esc, 취소 후 focus restore가 올바른가
+11. HIRED와 REJECTED에는 이동 form과 dialog 진입점이 없는가
+12. 기존 단방향 전이 정책을 복제하거나 우회하지 않는가
+13. 문서와 실제 UI 흐름이 일치하는가
+14. 실제 알림 발송·Undo·감사 로그·리디자인이 섞이지 않았는가
+15. 범용 modal abstraction, 새 의존성, 전역 상태 같은 과설계가 없는가
+
+각 지적은 다음 형식으로 작성해라.
+
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 문제 원인
+- 최소 수정안
+
+추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라.
+문제가 없다면 확인한 범위와 미검증 범위를 분리해서 보고해라.
+```
+
+### AI 출력 요지
+
+- `StageMoveForm`의 submit을 확인 요청으로 바꾸고, `App`의 최소 확인 대기 상태는 applicantId와 targetStage만 보관했다.
+- 확인 dialog는 기존 native dialog 패턴과 `STAGES` 라벨을 사용하며, 확인 handler만 기존 `move()`를 호출한다.
+- mutation hook·전이 정책·mock API는 수정하지 않아 기존 낙관적 업데이트, 한 엔티티 rollback, pending guard와 직접 PATCH 정책 검증을 재사용했다.
+
+### 리뷰 / 검증
+
+#### 1. 테스트 우선과 구현 검토
+
+- RED: `npm run test -- src/App.test.tsx`에서 확인 dialog를 찾지 못해 1개 테스트가 실패했고, 기존 submit이 즉시 pending·낙관적 이동을 시작한 DOM을 확인했다.
+- 채택: native `<dialog>`와 `showModal()`을 사용해 submit과 mutation 사이에 확인 경계를 넣었다. 취소 trigger는 ref로만 보관해 확인 대기 state를 applicantId·targetStage로 제한했다.
+- 기각: `window.confirm`, 새 dialog/state 라이브러리, 범용 modal abstraction, mutation hook 내부 확인 UI, 전이 정책 복제는 기존 패턴과 범위를 넓히므로 사용하지 않았다.
+
+#### 2. 자동 검증
+
+- focused: 구현 후 `npm run test -- src/App.test.tsx` — 23개 테스트 통과.
+- 전체: `npm run lint` 통과, `npm run test` — 8개 파일·72개 테스트 통과, `npm run build` 통과.
+- `git diff --check` 통과. build의 500kB 초과 chunk 경고는 기존 경고로 유지됐다.
+- 확인 전 PATCH 0회·Query cache/localStorage 불변, 취소·Esc 불변, 취소 후 focus 복귀를 통합 테스트로 검증했다. 확인 후 optimistic update·실패 rollback·동일 카드 guard·다른 카드 병렬 pending 회귀도 기존 통합 테스트 흐름에서 확인했다.
+
+#### 3. 사용자 검증과 읽기 전용 리뷰
+
+- 사용자 확인: 두 요청이 실제로 동시에 pending인 경우는 자동 테스트만 근거로 삼고 수동 목록에서 제외했다. 이를 제외한 보고된 수동 검증 시나리오는 모두 완료됐다.
+- 읽기 전용 리뷰: FR-03과 FR-04·FR-08·FR-11 회귀, native dialog 접근성, 종료 상태, 단일 전이 정책, 문서 일치, 범위 밖 기능·새 의존성·전역 상태 부재를 점검했고 지적 사항은 없었다.
+- 직접 브라우저 조작은 이 세션에서 수행하지 않았다.
+
+#### 4. 최종 판단
+
+- 채택: 확인 전과 취소 후에는 저장·cache mutation이 없고, 확인 시에만 검증된 기존 move 흐름이 시작된다.
+- 제한: 실제 지원자 알림, 관리자 상태 정정, 감사 로그, Undo와 스크린리더별 native dialog 안내 세부 동작은 이 scope에서 구현·검증하지 않았다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(stage-change-confirmation): 단계 변경 전 최종 확인 추가
+
+  - native dialog에서 지원자와 단계 변경을 확인한 뒤에만 PATCH 실행
+  - 취소·Esc의 상태 불변과 focus 복귀를 검증
+  - 기존 optimistic update·rollback·pending guard 회귀 보존
+  ```
+
+- 해시: 최종 동기화 대기
+
 ## 좋은 리뷰 예시
 
 ```md

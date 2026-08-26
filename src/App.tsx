@@ -6,14 +6,19 @@ import { filterApplicants, getApplicantRoles, groupApplicantsByStage } from './f
 import { getAllowedNextStages, STAGES } from './features/recruitment-board/model/stages'
 import type { Applicant, ApplicantRole, ApplicantStage } from './features/recruitment-board/model/applicant.types'
 
-function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage) => void }) {
+function StageMoveForm({ applicant, isPending, onConfirmRequest }: {
+  applicant: Applicant
+  isPending: boolean
+  onConfirmRequest: (stage: ApplicantStage, trigger: HTMLButtonElement) => void
+}) {
   const [targetStage, setTargetStage] = useState<ApplicantStage | ''>('')
   const allowedNextStages = getAllowedNextStages(applicant.stage)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!targetStage || targetStage === applicant.stage) return
-    onMove(targetStage)
+    const trigger = event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (trigger) onConfirmRequest(targetStage, trigger)
   }
 
   return (
@@ -33,6 +38,47 @@ function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant;
         이동
       </button>
     </form>
+  )
+}
+
+function StageChangeConfirmationDialog({ applicant, targetStage, onCancel, onConfirm }: {
+  applicant: Applicant
+  targetStage: ApplicantStage
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const currentStage = STAGES.find((stage) => stage.code === applicant.stage)
+  const nextStage = STAGES.find((stage) => stage.code === targetStage)
+  const titleId = `stage-change-confirmation-${applicant.id}`
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    if (!dialog.open) dialog.showModal()
+    dialog.addEventListener('close', onCancel)
+    return () => dialog.removeEventListener('close', onCancel)
+  }, [onCancel])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.confirmationDialog}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault()
+        dialogRef.current?.close()
+      }}
+    >
+      <h2 id={titleId}>{applicant.name} 단계 변경 확인</h2>
+      <p>현재 단계: {currentStage?.label}</p>
+      <p>변경 단계: {nextStage?.label}</p>
+      <div className={styles.confirmationActions}>
+        <button type="button" onClick={() => dialogRef.current?.close()}>취소</button>
+        <button type="button" onClick={onConfirm}>확인</button>
+      </div>
+    </dialog>
   )
 }
 
@@ -75,6 +121,7 @@ function App() {
   const [nameQuery, setNameQuery] = useState('')
   const [role, setRole] = useState<ApplicantRole | 'ALL'>('ALL')
   const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null)
+  const [stageChangeConfirmation, setStageChangeConfirmation] = useState<{ applicantId: string; targetStage: ApplicantStage } | null>(null)
   const [moveSuccess, setMoveSuccess] = useState('')
   const [moveError, setMoveError] = useState('')
   const { move, pendingIds } = useMoveApplicantStage({
@@ -85,12 +132,14 @@ function App() {
     },
   })
   const detailTriggerRef = useRef<HTMLButtonElement>(null)
+  const confirmationTriggerRef = useRef<HTMLButtonElement>(null)
   const boardViewportRef = useRef<HTMLDivElement>(null)
   const detailScrollPositionRef = useRef({ left: 0, top: 0 })
   const filteredApplicants = filterApplicants(applicants, { nameQuery, role })
   const applicantsByStage = groupApplicantsByStage(filteredApplicants)
   const roles = getApplicantRoles(applicants)
   const selectedApplicant = applicants.find((applicant) => applicant.id === selectedApplicantId)
+  const confirmationApplicant = applicants.find((applicant) => applicant.id === stageChangeConfirmation?.applicantId)
 
   function closeDetail() {
     setSelectedApplicantId(null)
@@ -105,6 +154,17 @@ function App() {
   function resetFilters() {
     setNameQuery('')
     setRole('ALL')
+  }
+
+  function cancelStageChangeConfirmation() {
+    setStageChangeConfirmation(null)
+    confirmationTriggerRef.current?.focus()
+  }
+
+  function confirmStageChange() {
+    const confirmation = stageChangeConfirmation
+    setStageChangeConfirmation(null)
+    if (confirmation) move(confirmation.applicantId, confirmation.targetStage)
   }
 
   return (
@@ -189,7 +249,10 @@ function App() {
                         <StageMoveForm
                           applicant={applicant}
                           isPending={pendingIds.has(applicant.id)}
-                          onMove={(targetStage) => move(applicant.id, targetStage)}
+                          onConfirmRequest={(targetStage, trigger) => {
+                            confirmationTriggerRef.current = trigger
+                            setStageChangeConfirmation({ applicantId: applicant.id, targetStage })
+                          }}
                         />
                       ) : <p>종료된 단계입니다.</p>}
                     </article>
@@ -201,6 +264,14 @@ function App() {
         </div>
       )}
       {selectedApplicant && <ApplicantDetailDialog applicant={selectedApplicant} onClose={closeDetail} />}
+      {stageChangeConfirmation && confirmationApplicant && (
+        <StageChangeConfirmationDialog
+          applicant={confirmationApplicant}
+          targetStage={stageChangeConfirmation.targetStage}
+          onCancel={cancelStageChangeConfirmation}
+          onConfirm={confirmStageChange}
+        />
+      )}
     </main>
   )
 }
