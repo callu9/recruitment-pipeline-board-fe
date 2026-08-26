@@ -1476,6 +1476,227 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 - 해시: 최종 동기화 대기
 - AI 초안 수정 요약: 미검증 브라우저 성능 최적화 대신 240건 직접 계산과 자동 검증 범위만 유지했다.
 
+## [detail-panel] 지원자 상세 다이얼로그 구현
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-06
+- 이번 기능에서 완료할 범위:
+  - 카드 본문의 상세 열기 button과 우측 sheet 스타일 native `<dialog>`
+  - 지원자 상세 필드, 접근 가능한 제목·닫기 button, `showModal()` 호출
+  - `close` 이벤트 기반 상태 동기화, trigger focus와 보드 스크롤 복귀
+  - 상세 열기·닫기 자동 테스트
+- 이번 기능에서 하지 않을 범위:
+  - 상세 패널 내부 단계 이동, 모달·focus trap 라이브러리
+  - 검색·필터·낙관적 업데이트·조회 상태 UI 변경, 반응형 재설계, 커밋
+
+### 프롬프트 1 — 최초 지시
+
+```text
+AGENTS.md와 docs/PRD.md, docs/TECH\_SPEC.md,
+docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 코드를 읽어라.
+
+이번 작업 scope는 detail-panel 하나뿐이다.
+연결 요구사항은 FR-06이다.
+
+완료 기준:
+\- 카드 본문의 상세 열기 컨트롤을 클릭하거나 키보드로 실행하면 우측 패널 형태의 모달이 열린다.
+\- 네이티브 \<dialog>와 showModal()을 사용한다.
+\- 상세 패널에는 이름, 직무, 지원일, 현재 단계, 이메일, 전화번호,
+&#x20; 경력 연차, 주요 기술, 메모가 표시된다.
+\- 패널에는 접근 가능한 제목과 닫기 버튼이 있다.
+\- Esc로 닫을 수 있다.
+\- 닫은 뒤 상세를 열었던 컨트롤로 포커스가 돌아간다.
+\- 패널을 열고 닫아도 검색어, 직무 필터, 보드 스크롤 맥락이 유지된다.
+\- 상세 열기 컨트롤과 단계 이동 form의 interactive 요소가 중첩되지 않는다.
+\- 상세 열기·닫기 키보드 동작을 테스트한다.
+
+이번 작업에서 하지 않을 것:
+\- 상세 패널 안의 단계 이동
+\- 새 모달 라이브러리·focus trap 라이브러리 추가
+\- 검색·필터, 낙관적 업데이트, 조회 상태 UI 변경
+\- 모바일 전용 반응형 재설계, 범위 밖 리팩터링
+\- 커밋
+
+제약:
+\- 선택된 지원자 ID와 패널 열림 상태는 RecruitmentBoard 수준의 로컬 UI state로 관리한다.
+\- 지원자 원본 목록은 TanStack Query cache를 재사용한다.
+\- \<dialog>는 aria-labelledby로 제목과 연결한다.
+\- 브라우저 기본 Esc 닫힘과 React 상태가 불일치하지 않게 close 이벤트를 처리한다.
+\- 기존 카드의 stage 이동 form과 상세 열기 button을 구조적으로 분리한다.
+\- 관련 없는 파일은 수정하지 않는다.
+
+편집 전에 다음을 출력해라.
+1\. 재사용할 카드·보드·지원자 모델 코드
+2\. 수정·생성할 파일과 책임
+3\. 상세 열기, dialog showModal, 닫기, focus restore의 상태 흐름
+4\. Esc, 닫기 button, 키보드 실행, 중첩 interactive 요소, 맥락 보존의 경계 시나리오
+5\. 먼저 실패를 확인할 테스트 계획
+6\. 범위를 넘는 제안과 제외 이유
+
+그 뒤 detail-panel 범위만 최소 구현해라.
+구현 후 변경 파일, diff 요약, 실제 실행한 명령과 결과, 수동 검증 항목,
+알려진 한계를 보고하고 멈춰라. 커밋하지 마라.
+```
+
+### AI 출력 요지
+
+- Query cache의 지원자 원본에서 선택 ID를 찾고, 보드 로컬 state와 ref로 native `<dialog>` 열기·닫기·focus 복귀를 처리했다.
+- 상세 button과 단계 이동 form을 형제 요소로 두고, dialog를 `aria-labelledby` 제목·닫기 button·모든 FR-06 상세 필드로 구성했다.
+- 실제 브라우저에서 발견한 focus 복귀 시 보드 가로 스크롤 이동을 열기 전 위치 복원으로 보완했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독
+
+- 유지: 지원자 원본은 TanStack Query cache만 사용했고, 검색어·직무 필터·이동 mutation에는 변경을 추가하지 않았다.
+- 수정: `close` 이벤트 하나가 닫기 button과 브라우저 기본 Esc 닫힘을 모두 state 해제·trigger focus 복귀로 연결한다. 이미 열린 dialog에는 `showModal()`을 다시 호출하지 않는다.
+- 기각: 별도 모달/focus trap 라이브러리, 패널 내부 단계 이동, 새 전역 상태와 반응형 재설계. native dialog와 보드 로컬 state로 현재 기준을 충족한다.
+
+#### 2. 자동 검증
+
+- RED 확인:
+  - 상세 button 부재 상태에서 `김민지 상세 열기` button을 찾지 못해 실패했다.
+  - 보드 scrollLeft 복원 로직 부재 상태에서 `30`이 `120`이어야 한다는 테스트가 실패했다.
+- 실행 명령:
+  - `npm run test -- src/App.test.tsx`
+  - `git diff --check`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run build`
+- 실제 결과:
+  - 앱 테스트 14개 통과.
+  - 전체 Vitest 7개 파일, 53개 테스트 통과.
+  - lint, build, diff whitespace 검사 통과.
+  - build는 기존 500kB chunk 경고를 출력했다.
+
+#### 3. 수동 검증
+
+- 로컬 Vite 앱에서 `지원자 006 상세 열기`를 클릭해 우측 dialog의 제목, 직무, 지원일, 단계, 이메일, 전화번호, 경력, 기술, 메모를 확인했다.
+- 닫기 button 뒤 focus가 상세 trigger로 복귀하고, 적용한 `지원자 006` 검색어가 유지되는 것을 확인했다.
+- 실제 브라우저에서 focus 복귀가 보드 가로 스크롤을 바꾸는 문제를 `112 → 30`으로 재현했다. 자동 테스트로 열기 전 scrollLeft 복원을 보호했다.
+- 사용자 확인: 실제 브라우저에서 Enter/Space 상세 열기, Esc 닫기, 직무 필터 보존, 작은 viewport의 panel overflow를 검증했다.
+
+#### 4. 최종 판단
+
+- 수정 후 채택.
+- 내가 최종 책임지고 확인한 범위: native dialog 열기, 상세 필드, 접근 가능한 제목, 닫기 button, close 이벤트 상태 동기화, focus 복귀, 필터와 보드 스크롤 위치 복원, 상세 button/form 구조 분리.
+- 미검증 또는 남은 위험: browser-level 키보드 입력 자동화는 현재 Vitest/jsdom 범위에 없다. 실제 브라우저 동작은 사용자 확인으로 기록했다.
+
+### 후속 프롬프트 2 — 미커밋 diff 리뷰
+
+```text
+현재 브랜치의 미커밋 diff를 리뷰해라. 파일은 수정하지 마라.
+
+대상 scope는 detail-panel이고 연결 요구사항은 FR-06이다.
+
+우선순위:
+1\. 카드 상세 컨트롤이 클릭과 키보드 실행 모두로 dialog를 여는가
+2\. \<dialog>와 showModal()을 사용하며 제목이 aria-labelledby로 연결되는가
+3\. 요구된 모든 상세 필드가 올바른 지원자 데이터로 표시되는가
+4\. 닫기 button과 Esc가 모두 동작하는가
+5\. dialog의 close 이벤트와 React 상태가 일치하는가
+6\. 닫은 뒤 trigger로 포커스가 복귀하는가
+7\. 검색어, 직무 필터, 보드 스크롤이 열기·닫기 과정에서 바뀌지 않는가
+8\. 상세 열기 button과 stage 이동 select/button/form이 중첩되지 않는가
+9\. 불필요한 모달 의존성, 전역 상태, 범위 밖 변경이 없는가
+10\. 테스트가 통과해도 놓칠 접근성 반례가 있는가
+
+각 지적은 아래 형식으로 작성해라.
+\- 심각도: blocker / major / minor
+\- 파일과 코드 위치
+\- 재현 시나리오
+\- 왜 문제인지
+\- 최소 수정안
+
+문제가 없으면, 확인한 범위와 아직 검증하지 못한 범위를 분리해라.
+```
+
+### 후속 프롬프트 3 — 리뷰 지적 보완
+
+```text
+실제 브라우저의 Enter/Space·Esc 동작, 직무 필터 보존 자동 회귀, 작은 viewport에서 panel 외형의 overflow => 모두 실제 브라우저에서 검증 완료했고
+
+방금 detail-panel 리뷰에서 확인된 major,minor만 수정해라.
+
+이번 작업은 FR-06 범위를 벗어나지 않는다.
+상세 패널 내부 단계 이동, 모달 라이브러리, 검색·필터 변경, 조회 상태 UI,
+전역 상태 추가는 구현하지 마라.
+
+수정 전에 각 지적의 원인과 최소 수정 파일을 짧게 제시해라.
+수정 후 아래 검증을 실제로 실행하고 결과를 보고해라.
+
+- 카드 상세 button 클릭으로 dialog 열기 테스트
+- Enter 또는 Space 키보드 실행 테스트
+- 모든 상세 필드 표시 테스트
+- Esc 닫기 테스트
+- 닫기 button 테스트
+- 닫은 뒤 trigger focus 복귀 테스트
+- npm run lint
+- npm run test
+- npm run build
+
+변경 파일, 수정한 지적, 실제 명령 결과, 남은 미검증 사항을 보고한 뒤 멈춰라.
+커밋하지 마라.
+```
+
+### 후속 출력과 추가 검증
+
+- 수정: 검색어·직무 필터를 설정한 뒤 dialog를 열고 닫아도 두 값이 보존되는 자동 회귀 테스트를 추가했다.
+- 수정: dialog에 `box-sizing: border-box`를 추가해 `100dvh`와 padding이 합쳐져 viewport를 넘지 않게 했다.
+- 실행: `npm run test -- src/App.test.tsx`, `git diff --check`, `npm run lint`, `npm run test`, `npm run build`.
+- 결과: 앱 테스트 15개, 전체 54개 테스트, lint, build, diff 검사가 통과했다. build의 기존 500kB chunk 경고는 유지됐다.
+
+### 후속 프롬프트 4 — 패널 하단·배경 보드 스크롤 분석
+
+```text
+모두 정상작동 하나, 패널이 열린 채로 세로 스크롤 이동이 가능하며, 패널 하단 공백이 보여서 하얀색 배경으로 세로가 꽉 차지 않는다. 코드 분석 및 최소 수정안 알려줘
+```
+
+### 후속 프롬프트 5 — full-height sheet와 배경 스크롤 보완 확인
+
+```text
+상세 패널을 열면 배경 보드가 세로 스크롤되고 패널 하단이 viewport를 채우지 않는 문제를 확인하여
+CSS Module 환경에서 body 스크롤 잠금 selector가 dialog의 hashed 클래스와 매칭되도록 :global(body):has(.detailDialog[open]) 형태로 보정
+dialog를 우측 full-height sheet로 고정하기 위해 position: fixed, inset: 0 0 0 auto, height: 100dvh, max-height: none, background: #fff, overflow-y: auto를 적용
+이 변경 과정에서 기존 border: 0이 빠져 native \<dialog>의 기본 3px border가 다시 보이는 것을 확인하여 border: 0을 다시 추가함
+검증내용 확인 및 업데이트
+```
+
+### 후속 출력과 추가 검증
+
+- 사용자 수정 확인: `:global(body):has(.detailDialog[open])`은 전역 body와 CSS Module의 해시된 `.detailDialog`를 함께 선택한다. dialog가 열린 동안 배경 보드의 세로 스크롤을 잠근다.
+- 사용자 수정 확인: dialog에는 `position: fixed`, `inset: 0 0 0 auto`, `height: 100dvh`, `max-height: none`, 흰 배경, 내부 세로 스크롤, `border: 0`이 적용돼 우측 full-height sheet와 native border 제거를 처리한다.
+- 자동 검증: `npm run lint`, `npm run test`, `npm run build`, `git diff --check`를 실행했다. lint와 diff 검사 통과, Vitest 7개 파일·54개 테스트 통과, production build 통과. build의 기존 500kB chunk 경고는 유지됐다.
+- 수정: 우측 sheet의 `width`, `padding`, `box-shadow`를 복구했고 full-height·배경 스크롤 잠금·native border 제거 보정은 유지했다.
+
+### 후속 프롬프트 6 — sheet 폭·여백·그림자 복구
+
+```text
+이전의 `width`, `padding`, `box-shadow` 복구
+```
+
+### 후속 출력과 추가 검증
+
+- 수정: `.detailDialog`에 `width: min(30rem, 100%)`, `padding: 1.5rem`, `box-shadow: -0.5rem 0 1.5rem rgb(23 32 51 / 20%)`를 복구했다.
+- 실행: `git diff --check`, `npm run lint`, `npm run test`, `npm run build`.
+- 결과: lint와 diff 검사 통과, Vitest 7개 파일·54개 테스트 통과, production build 통과. build의 기존 500kB chunk 경고는 유지됐다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(detail-panel): 지원자 상세 다이얼로그 제공
+
+  - native dialog와 보드 로컬 선택 state로 상세 패널 추가
+  - close 이벤트에서 trigger focus와 보드 스크롤 맥락 복원
+  - 상세 필드와 닫기 동작 회귀 테스트 추가
+  ```
+
+- 해시: 최종 동기화 대기
+- AI 초안 수정 요약: focus 복귀만으로 충분하다는 초안을 기각하고, 실제 브라우저에서 재현한 가로 스크롤 변경까지 복원했다.
+
 ## [feature-scope] 기능명
 
 ### 목표 / 수용 기준

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import styles from './App.module.css'
 import { useApplicantsQuery } from './features/recruitment-board/api/useApplicantsQuery'
 import { useMoveApplicantStage } from './features/recruitment-board/api/useMoveApplicantStage'
@@ -35,14 +35,63 @@ function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant;
   )
 }
 
+function ApplicantDetailDialog({ applicant, onClose }: { applicant: Applicant; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const stage = STAGES.find((current) => current.code === applicant.stage)
+  const titleId = `applicant-detail-${applicant.id}`
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    if (!dialog.open) dialog.showModal()
+    dialog.addEventListener('close', onClose)
+    return () => dialog.removeEventListener('close', onClose)
+  }, [onClose])
+
+  return (
+    <dialog ref={dialogRef} className={styles.detailDialog} aria-labelledby={titleId}>
+      <header className={styles.detailHeader}>
+        <h2 id={titleId}>{applicant.name} 상세 정보</h2>
+        <button type="button" onClick={() => dialogRef.current?.close()}>닫기</button>
+      </header>
+      <dl className={styles.detailList}>
+        <div><dt>직무</dt><dd>{applicant.role}</dd></div>
+        <div><dt>지원일</dt><dd>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</dd></div>
+        <div><dt>현재 단계</dt><dd>{stage?.label}</dd></div>
+        <div><dt>이메일</dt><dd>{applicant.email}</dd></div>
+        <div><dt>전화번호</dt><dd>{applicant.phone}</dd></div>
+        <div><dt>경력 연차</dt><dd>{applicant.experienceYears}년</dd></div>
+        <div><dt>주요 기술</dt><dd>{applicant.skills.join(', ')}</dd></div>
+        <div><dt>메모</dt><dd>{applicant.note}</dd></div>
+      </dl>
+    </dialog>
+  )
+}
+
 function App() {
   const { data: applicants = [], isError, refetch } = useApplicantsQuery()
   const { move, moveError, pendingIds } = useMoveApplicantStage()
   const [nameQuery, setNameQuery] = useState('')
   const [role, setRole] = useState<ApplicantRole | 'ALL'>('ALL')
+  const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null)
+  const detailTriggerRef = useRef<HTMLButtonElement>(null)
+  const boardViewportRef = useRef<HTMLDivElement>(null)
+  const detailScrollPositionRef = useRef({ left: 0, top: 0 })
   const filteredApplicants = filterApplicants(applicants, { nameQuery, role })
   const applicantsByStage = groupApplicantsByStage(filteredApplicants)
   const roles = getApplicantRoles(applicants)
+  const selectedApplicant = applicants.find((applicant) => applicant.id === selectedApplicantId)
+
+  function closeDetail() {
+    setSelectedApplicantId(null)
+    detailTriggerRef.current?.focus()
+    const board = boardViewportRef.current
+    if (board) {
+      board.scrollLeft = detailScrollPositionRef.current.left
+      board.scrollTop = detailScrollPositionRef.current.top
+    }
+  }
 
   return (
     <main className={styles.shell}>
@@ -79,7 +128,7 @@ function App() {
         const applicant = applicants.find((current) => current.id === applicantId)
         return applicant ? <p key={applicant.id}>{applicant.name}님의 단계를 저장하는 중입니다.</p> : null
       })}
-      <div className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
+      <div ref={boardViewportRef} className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
         <div className={styles.board}>
           {STAGES.map((stage, index) => (
             /* StageColumn: 단계 제목, 현재 결과 수, 소속 지원자 카드 목록을 렌더링한다. */
@@ -96,6 +145,17 @@ function App() {
                     <p>{applicant.role}</p>
                     <p>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
                     <p>현재 단계: {stage.label}</p>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        const board = boardViewportRef.current
+                        if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
+                        detailTriggerRef.current = event.currentTarget
+                        setSelectedApplicantId(applicant.id)
+                      }}
+                    >
+                      {applicant.name} 상세 열기
+                    </button>
                     <StageMoveForm
                       applicant={applicant}
                       isPending={pendingIds.has(applicant.id)}
@@ -108,6 +168,7 @@ function App() {
           ))}
         </div>
       </div>
+      {selectedApplicant && <ApplicantDetailDialog applicant={selectedApplicant} onClose={closeDetail} />}
     </main>
   )
 }

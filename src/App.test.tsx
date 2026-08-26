@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, expect, test } from 'vitest'
 import App from './App'
@@ -8,9 +8,125 @@ import type { Applicant } from './features/recruitment-board/model/applicant.typ
 import { resetMockApiTestConfig, setMockApiTestConfig } from './mocks/mockConfig'
 import { server } from './test/server'
 
+if (!HTMLDialogElement.prototype.showModal) {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: { value(this: HTMLDialogElement) { this.open = true } },
+    close: { value(this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')) } },
+  })
+}
+
 afterEach(() => {
+  cleanup()
   localStorage.clear()
   resetMockApiTestConfig()
+})
+
+test('opens applicant details and restores the trigger focus when the dialog closes', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1',
+    name: '김민지',
+    role: 'Frontend Developer',
+    appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW',
+    email: 'minji@example.com',
+    phone: '010-0000-0001',
+    experienceYears: 3,
+    skills: ['React', 'TypeScript'],
+    note: 'B2B SaaS 경험 보유',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>,
+  )
+
+  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
+  detailTrigger.focus()
+  fireEvent.click(detailTrigger)
+
+  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' })
+  expect(dialog).toHaveAttribute('open')
+  expect(dialog).toHaveAttribute('aria-labelledby')
+  expect(within(dialog).getByText('Frontend Developer')).toBeInTheDocument()
+  expect(within(dialog).getByText('2026.08.01')).toBeInTheDocument()
+  expect(within(dialog).getByText('서류검토')).toBeInTheDocument()
+  expect(within(dialog).getByText('minji@example.com')).toBeInTheDocument()
+  expect(within(dialog).getByText('010-0000-0001')).toBeInTheDocument()
+  expect(within(dialog).getByText('3년')).toBeInTheDocument()
+  expect(within(dialog).getByText('React, TypeScript')).toBeInTheDocument()
+  expect(within(dialog).getByText('B2B SaaS 경험 보유')).toBeInTheDocument()
+
+  fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(detailTrigger).toHaveFocus()
+})
+
+test('restores focus after the browser closes the dialog with Escape', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
+  detailTrigger.focus()
+  fireEvent.click(detailTrigger)
+
+  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' }) as HTMLDialogElement
+  dialog.close()
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(detailTrigger).toHaveFocus()
+})
+
+test('restores the board scroll position after closing applicant details', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const board = screen.getByRole('region', { name: '채용 단계 보드' })
+  board.scrollLeft = 120
+  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
+  fireEvent.click(detailTrigger)
+  board.scrollLeft = 30
+
+  fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(board.scrollLeft).toBe(120)
+})
+
+test('keeps the search query and role filter after closing applicant details', async () => {
+  const applicants: Applicant[] = [
+    {
+      id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+    },
+    {
+      id: 'applicant-2', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
+    },
+  ]
+  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  await screen.findByText('김민지')
+  const nameQuery = screen.getByLabelText('이름 검색')
+  const roleFilter = screen.getByLabelText('직무 필터')
+  fireEvent.change(nameQuery, { target: { value: '김민지' } })
+  fireEvent.change(roleFilter, { target: { value: 'Frontend Developer' } })
+  fireEvent.click(await screen.findByRole('button', { name: '김민지 상세 열기' }))
+  fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+
+  expect(nameQuery).toHaveValue('김민지')
+  expect(roleFilter).toHaveValue('Frontend Developer')
 })
 
 test('renders the project shell title', () => {

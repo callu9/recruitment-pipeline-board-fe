@@ -83,3 +83,56 @@
   display: grid;
   gap: 0.25rem;
 }
+
+:global(body):has(.detailDialog[open]) {
+  overflow: hidden;
+}
+
+.detailDialog {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(30rem, 100%);
+  margin: 0;
+  height: 100dvh;
+  max-height: none;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background: #fff;
+  overflow-y: auto;
+  border: 0;
+  box-shadow: -0.5rem 0 1.5rem rgb(23 32 51 / 20%);
+}
+
+.detailDialog::backdrop {
+  background: rgb(23 32 51 / 35%);
+}
+
+.detailHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.detailHeader h2 {
+  margin: 0;
+}
+
+.detailList {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+}
+
+.detailList div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.detailList dt {
+  font-weight: 700;
+}
+
+.detailList dd {
+  margin: 0;
+}
