@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Applicant } from './applicant.types'
-import { groupApplicantsByStage } from './applicantSelectors'
+import { filterApplicants, getApplicantRoles, groupApplicantsByStage } from './applicantSelectors'
 
 const applicants: Applicant[] = [
   {
@@ -39,4 +39,26 @@ test('groups every applicant once under its stage and keeps empty stages', () =>
   expect(grouped.REJECTED).toEqual([])
   expect(Object.values(grouped).flat()).toHaveLength(2)
   expect(applicants.map(({ stage }) => stage)).toEqual(['DOCUMENT_REVIEW', 'HIRED'])
+})
+
+test('filters by a trimmed case-insensitive name query without changing the source list', () => {
+  const englishNameApplicant: Applicant = { ...applicants[0], id: 'applicant-3', name: 'Alex Kim' }
+  const source = [...applicants, englishNameApplicant]
+  const sourceBeforeFiltering = [...source]
+
+  expect(filterApplicants(source, { nameQuery: '  aLeX  ', role: 'ALL' })).toEqual([englishNameApplicant])
+  expect(source).toEqual(sourceBeforeFiltering)
+  expect(applicants).toEqual([
+    expect.objectContaining({ id: 'applicant-1', name: '김민지' }),
+    expect.objectContaining({ id: 'applicant-2', name: '이준호' }),
+  ])
+})
+
+test('combines name and role filters and returns each current role once', () => {
+  const alexDesigner: Applicant = { ...applicants[0], id: 'applicant-3', name: 'Alex Kim', role: 'Product Designer' }
+  const alexDeveloper: Applicant = { ...applicants[0], id: 'applicant-4', name: 'Alex Lee' }
+  const source = [...applicants, alexDesigner, alexDeveloper]
+
+  expect(filterApplicants(source, { nameQuery: 'alex', role: 'Frontend Developer' })).toEqual([alexDeveloper])
+  expect(getApplicantRoles(source)).toEqual(['Frontend Developer', 'Product Manager', 'Product Designer'])
 })

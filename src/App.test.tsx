@@ -365,3 +365,38 @@ test('retries a failed applicants query only after the user requests it', async 
   expect(await within(container).findByText('김민지')).toBeInTheDocument()
   expect(requests).toBe(2)
 })
+
+test('filters stage cards and counts by name and role, then resets both filters', async () => {
+  const applicants: Applicant[] = [
+    {
+      id: 'applicant-1', name: 'Alex Kim', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'alex@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+    },
+    {
+      id: 'applicant-2', name: 'Alex Park', role: 'Product Designer', appliedAt: '2026-08-02T09:00:00.000Z',
+      stage: 'INTERVIEW', email: 'park@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Figma'], note: '',
+    },
+  ]
+  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
+
+  const { container } = render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>,
+  )
+
+  await within(container).findByText('Alex Kim')
+  fireEvent.change(within(container).getByLabelText('이름 검색'), { target: { value: '  aLeX  ' } })
+  fireEvent.change(within(container).getByLabelText('직무 필터'), { target: { value: 'Frontend Developer' } })
+
+  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const interviewColumn = within(container).getByRole('region', { name: '면접' })
+  expect(within(documentReviewColumn).getByText('1명')).toBeInTheDocument()
+  expect(within(documentReviewColumn).getByText('Alex Kim')).toBeInTheDocument()
+  expect(within(interviewColumn).getByText('0명')).toBeInTheDocument()
+  expect(within(interviewColumn).queryByText('Alex Park')).not.toBeInTheDocument()
+
+  fireEvent.click(within(container).getByRole('button', { name: '필터 초기화' }))
+
+  expect(await within(interviewColumn).findByText('Alex Park')).toBeInTheDocument()
+})

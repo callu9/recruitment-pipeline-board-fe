@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react'
 import styles from './App.module.css'
 import { useApplicantsQuery } from './features/recruitment-board/api/useApplicantsQuery'
 import { useMoveApplicantStage } from './features/recruitment-board/api/useMoveApplicantStage'
-import { groupApplicantsByStage } from './features/recruitment-board/model/applicantSelectors'
+import { filterApplicants, getApplicantRoles, groupApplicantsByStage } from './features/recruitment-board/model/applicantSelectors'
 import { STAGES } from './features/recruitment-board/model/stages'
-import type { Applicant, ApplicantStage } from './features/recruitment-board/model/applicant.types'
+import type { Applicant, ApplicantRole, ApplicantStage } from './features/recruitment-board/model/applicant.types'
 
 function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage) => void }) {
   const [targetStage, setTargetStage] = useState<ApplicantStage | ''>('')
@@ -38,7 +38,11 @@ function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant;
 function App() {
   const { data: applicants = [], isError, refetch } = useApplicantsQuery()
   const { move, moveError, pendingIds } = useMoveApplicantStage()
-  const applicantsByStage = groupApplicantsByStage(applicants)
+  const [nameQuery, setNameQuery] = useState('')
+  const [role, setRole] = useState<ApplicantRole | 'ALL'>('ALL')
+  const filteredApplicants = filterApplicants(applicants, { nameQuery, role })
+  const applicantsByStage = groupApplicantsByStage(filteredApplicants)
+  const roles = getApplicantRoles(applicants)
 
   return (
     <main className={styles.shell}>
@@ -50,6 +54,26 @@ function App() {
           </button>
         )}
       </header>
+      <form className={styles.toolbar} aria-label="지원자 필터" onSubmit={(event) => event.preventDefault()}>
+        <label>
+          이름 검색
+          <input value={nameQuery} onChange={(event) => setNameQuery(event.target.value)} />
+        </label>
+        <label>
+          직무 필터
+          <select value={role} onChange={(event) => setRole(event.target.value as ApplicantRole | 'ALL')}>
+            <option value="ALL">전체</option>
+            {roles.map((currentRole) => (
+              <option key={currentRole} value={currentRole}>
+                {currentRole}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={() => { setNameQuery(''); setRole('ALL') }}>
+          필터 초기화
+        </button>
+      </form>
       {moveError && <p role="alert">{moveError}</p>}
       {[...pendingIds].map((applicantId) => {
         const applicant = applicants.find((current) => current.id === applicantId)
