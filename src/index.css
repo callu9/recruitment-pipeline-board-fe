@@ -1,7 +1,33 @@
 :root {
-  color: #172033;
-  font-family: system-ui, sans-serif;
-  background: #f8fafc;
+  --color-canvas: #f6f8fb;
+  --color-surface: #fff;
+  --color-text: #172033;
+  --color-text-muted: #526070;
+  --color-border: #dbe3ef;
+  --color-border-strong: #9aa9bc;
+  --color-control-hover: #f1f4f8;
+  --color-control-disabled: #e8edf3;
+  --color-focus: #2563eb;
+  --color-backdrop: rgb(23 32 51 / 35%);
+  --font-family-sans: system-ui, sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-weight-semibold: 600;
+  --line-height-base: 1.5;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --border-default: 1px solid var(--color-border);
+  --focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+  --shadow-sheet: -0.5rem 0 1.5rem rgb(23 32 51 / 20%);
+  color: var(--color-text);
+  font-family: var(--font-family-sans);
+  line-height: var(--line-height-base);
+  background: var(--color-canvas);
 }
 
 body {

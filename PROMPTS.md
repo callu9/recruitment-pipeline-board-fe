@@ -2828,3 +2828,341 @@ prompt-record, staging, commit을 진행하지 마라.
   ```
 
 - 해시: 최종 동기화 대기
+
+
+## [design-foundation] 리디자인 기반 토큰과 기본 컨트롤 상태
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-05, FR-11, TECH_SPEC D-009.
+- 현재 화면에서 실제 사용하는 색상, 간격, 타이포, radius, border, shadow, focus 토큰만 정의한다.
+- native `button`, `input`, `select`의 hover, focus-visible, disabled 상태를 개선한다.
+- 기존 semantic HTML, 키보드 접근, pending·disabled 처리, dialog focus 복귀 계약을 유지한다.
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast, 범용 UI 컴포넌트 추상화는 추가하지 않는다.
+
+### 프롬프트 1 — 리디자인 worktree와 scope 전략 확정
+
+````text
+리디자인 작업을 다음 전략으로 진행한다.
+
+먼저 아래 문서를 순서대로 읽고 현재 Git 상태와 진행 중인 feature scope를 확인해라.
+
+1. `docs/ASSIGNMENT.md`
+2. `docs/PRD.md`
+3. `docs/TECH_SPEC.md`
+4. `docs/IMPLEMENTATION_AND_COMMIT_PLAN.md`
+5. `PROMPTS.md`의 현재 feature section
+6. `DECISIONS.md`
+7. 최근 커밋과 현재 코드
+
+## 확정된 기술 방향
+
+이번 리디자인에서는 Ant Design, Carbon, SLDS 등 외부 UI 컴포넌트 라이브러리를 설치하지 않는다.
+
+외부 UI 라이브러리가 과제에서 금지된 것은 아니지만, 현재 요구사항은 다음과 같다.
+
+- 단계별 태그
+- 컬럼 강조
+- button, input, select 상태
+- 카드 정보 위계
+- 상세·피드백 화면의 시각 개선
+
+이 요구사항은 기존 native HTML과 CSS Modules로 충족할 수 있다.
+
+기존 `<select>`, `<button>`, `<dialog>`에는 다음 계약이 이미 존재한다.
+
+- 키보드 접근
+- focus 복귀
+- disabled 및 pending 상태
+- semantic HTML
+- 관련 자동 테스트
+
+리디자인 과정에서 이를 라이브러리 컴포넌트로 교체하지 말고 기존 동작과 semantic HTML을 유지해라.
+
+Ant Design 도입은 다음 기능이 실제 PRD와 수용 기준으로 승인된 이후에만 재검토한다.
+
+- 복합 데이터 테이블
+- 대량 편집 폼
+- 정렬과 페이지네이션
+- 일괄 선택·일괄 작업
+- 복잡한 관리자 워크플로우
+
+다음을 추가하지 않는다.
+
+- 새 UI 컴포넌트 라이브러리
+- CSS-in-JS
+- 전역 상태
+- toast 시스템
+- 범용 UI 컴포넌트 추상화
+
+## 브랜치·워크트리 전략
+
+현재 checkout의 미커밋 변경은 기존 작업 공간에 그대로 보존한다.
+
+현재 checkout이 dirty라는 이유만으로 worktree 생성을 중단하지 마라. 리디자인 worktree는 working tree가 아니라 최신 committed `main`을 base로 생성한다.
+
+따라서 기존 checkout의 staged, unstaged, untracked 변경은 새 worktree에 포함하지 않는다.
+
+기존 checkout에서 다음을 하지 마라.
+
+- stash
+- restore
+- 미커밋 파일 삭제 또는 수정
+- 기존 변경 staging
+- 기존 변경 commit
+- 미커밋 변경을 새 worktree에 복사
+- 기존 작업 scope와 리디자인 scope 혼합
+
+현재 checkout에 진행 중인 별도 feature 변경이 있어도 이를 완료하거나 정리하지 마라. 해당 변경은 사용자 소유 작업으로 보존하고, committed `main` 기준의 별도 worktree에서 리디자인을 진행해라.
+
+worktree 생성 전에 다음을 읽기 전용으로 확인한다.
+
+- 현재 저장소와 branch 상태
+- committed `main`의 HEAD
+- `main`과 현재 로컬 `origin/main`의 일치 여부
+- `ui-redesign` branch 존재 여부
+- 대상 worktree 경로 존재 여부
+- 현재 worktree 목록
+
+현재 checkout의 dirty 상태는 blocker가 아니다.
+
+다음 경우에만 blocker로 보고하고 생성하지 마라.
+
+- committed `main`과 로컬 `origin/main`이 일치하지 않음
+- `ui-redesign` branch가 이미 존재함
+- 대상 worktree 경로가 이미 존재함
+- 동일 branch가 다른 worktree에서 사용 중임
+- worktree 생성 명령이 실패함
+
+조건을 충족하면 다음 branch와 worktree를 생성한다.
+
+- branch: `ui-redesign`
+- worktree: `../recruitment-pipeline-board-fe-ui-redesign`
+- base: 최신 committed `main`
+- branch prefix: 없음
+
+`codex/` 또는 다른 prefix를 붙이지 마라.
+
+사용할 명령:
+
+```bash
+git worktree add ../recruitment-pipeline-board-fe-ui-redesign \
+  -b ui-redesign main
+```
+
+생성 후에는 새 worktree에서만 작업한다. 기존 checkout과 그 미커밋 변경은 건드리지 않는다.
+
+새 worktree에서 다음을 확인한다.
+
+- 현재 branch가 `ui-redesign`인지
+- HEAD가 생성 당시 committed `main`과 같은지
+- `git status`가 clean인지
+- 기존 미커밋 변경이 새 worktree에 포함되지 않았는지
+
+의존성 설치가 필요하면 기존 lockfile을 사용하고 새 dependency를 추가하지 않는다. 설치 과정에서 추적 파일이 변경되면 진행하지 말고 blocker로 보고한다.
+
+새 worktree의 baseline으로 다음을 실행한다.
+
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `git diff --check`
+
+baseline이 실패하면 리디자인 코드를 작성하지 말고 실제 실패 결과를 보고한다.
+
+## 리디자인 branch 구성
+
+`ui-redesign`은 리디자인 전체를 담는 하나의 branch다.
+
+아래 항목은 별도 branch가 아니라 순차적으로 진행하는 feature commit scope다.
+
+```text
+main
+└─ ui-redesign
+   ├─ feat(design-foundation)
+   ├─ feat(stage-visual-language)
+   ├─ feat(board-density)
+   └─ feat(detail-feedback-redesign)
+```
+
+한 scope를 구현·검증·기록·commit한 뒤에만 다음 scope로 이동한다.
+
+각 scope에서 `PROMPTS.md` 제목과 commit message의 scope를 정확히 일치시켜라.
+
+예:
+
+- `[design-foundation]`
+- `feat(design-foundation): ...`
+
+## Scope별 목적
+
+### 1. design-foundation
+
+- 현재 화면에서 실제 사용하는 색상, 간격, 타이포, radius, border, shadow, focus 토큰만 정의
+- button, input, select의 hover, focus-visible, disabled 상태 개선
+- 사용되지 않는 토큰이나 범용 UI 컴포넌트 추상화 금지
+- 기존 native control 동작 유지
+- 연결 근거: FR-05, FR-11, TECH_SPEC의 CSS Modules 결정
+
+### 2. stage-visual-language
+
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 시각적으로 구분
+- 컬럼 accent, 단계 태그, 인원수 badge에 일관된 단계 색상 적용
+- 색상만으로 상태를 전달하지 않고 단계 텍스트 유지
+- 기존 `STAGES` 메타데이터와 단계 전이 정책 재사용
+- 연결 요구사항: FR-01, FR-02, FR-11
+
+### 3. board-density
+
+- 검색·필터 toolbar와 5개 컬럼의 정보 위계 개선
+- 카드 정보를 이름·단계·직무·지원일·액션 순서로 정리
+- 상세 액션과 단계 이동 form의 인터랙션 분리 유지
+- 보드 가로 스크롤과 필터 결과 count 계약 유지
+- 연결 요구사항: FR-01, FR-02, FR-05, FR-11
+
+### 4. detail-feedback-redesign
+
+- native dialog 기반 우측 상세 패널의 정보 구조 개선
+- loading, error, empty, pending, success, failure 상태의 시각 표현 개선
+- 기존 `role="status"`, `role="alert"`, focus 복귀 계약 유지
+- toast, modal, focus-trap 라이브러리 추가 금지
+- 연결 요구사항: FR-06, FR-07, FR-11
+
+## 제외 범위
+
+다음은 현재 리디자인 branch에서 구현하거나 별도 branch로 만들지 않는다.
+
+- applicant table view
+- 관리자 상태 정정
+- 역할·권한 관리
+- 채용 분석 dashboard
+- 단계 변경 확인 dialog
+- Undo
+- 서버 pagination
+- 일괄 작업
+- drag and drop
+- 새로운 제품 기능
+- 현재 scope와 무관한 refactoring
+
+위 항목은 향후 PRD와 수용 기준이 별도로 승인될 때만 다시 계획한다.
+
+기존 checkout에 위 기능과 관련된 미커밋 변경이 있더라도 이를 수정·삭제·복사하지 않는다.
+
+## Scope 작업 절차
+
+각 scope를 시작하기 전에 반드시 다음을 먼저 보고해라.
+
+1. 현재 scope 이름
+2. 연결 요구사항 ID
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 코드에서 재사용할 구조
+5. 최소 구현 방식
+6. 자동 검증 시나리오
+7. 수동 브라우저 검증 시나리오
+8. 명시적으로 제외할 범위
+
+이 보고와 사용자 승인을 받기 전에는 코드를 수정하지 마라.
+
+구현 후에는 다음을 실제 실행하고 결과를 보고해라.
+
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `git diff --check`
+
+그다음 다음 항목을 보고하고 사용자 검증을 기다려라.
+
+- unstaged diff
+- 변경 파일
+- 충족한 수용 기준
+- 수동 확인 항목
+- 알려진 제한
+- 기각하거나 다시 작성한 AI 제안과 이유
+
+사용자 검증 전에는 다음을 하지 마라.
+
+- `PROMPTS.md` 기록
+- staging
+- commit
+
+사용자 검증 이후에는 프로젝트 지침에 따라 다음 순서로 진행한다.
+
+1. `prompt-record` 실행
+2. 현재 scope의 `PROMPTS.md` section 포함
+3. 기록 변경에 필요한 검증 실행
+4. 현재 scope 파일만 stage
+5. staged diff 보고
+6. 명시적인 commit 지시 대기
+
+## 이번 요청의 종료 지점
+
+이번 요청에서는 다음까지만 진행한다.
+
+1. 기존 checkout과 미커밋 변경을 읽기 전용으로 확인
+2. dirty 변경을 건드리지 않고 committed `main` 기준으로 `ui-redesign` worktree와 branch 생성
+3. 새 worktree의 branch, HEAD, clean 상태 확인
+4. baseline lint, test, build, diff check 실행
+5. 첫 scope인 `design-foundation`의 작업 전 보고
+
+조건을 충족하더라도 리디자인 코드는 아직 작성하지 마라.
+
+`design-foundation` 작업 전 보고를 제시한 뒤 사용자 승인을 기다려라.
+````
+
+### 프롬프트 2 — prompt-record 로그 조회 예외 승인
+
+```text
+`prompt-record` 로그 조회 예외를 승인한다. 현재 대화에 보이는 실제 사용자 프롬프트를 원문 그대로 사용해 `[design-foundation]` 기록을 작성해라.
+```
+
+### AI 출력 요지
+
+- dirty 상태인 기존 checkout을 수정하지 않고 committed `main` 기준의 `ui-redesign` worktree를 생성·검증했다.
+- `src/index.css`에는 현재 화면이 소비하는 토큰만 정의하고, `src/App.module.css`에서 해당 토큰으로 기존 스타일을 정리했다.
+- native `button`, `input`, `select`에 공통 hover, focus-visible, disabled 표현을 적용하면서 JSX와 기존 동작 계약은 변경하지 않았다.
+- 새 의존성이나 범용 컴포넌트 없이 자동 검증, 브라우저 검증, 읽기 전용 diff 리뷰를 수행했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- 변경 파일은 `src/index.css`, `src/App.module.css` 두 개로 제한했고, 정의한 토큰은 모두 실제 스타일에서 사용했다.
+- native control과 기존 CSS Modules 구조를 재사용해 semantic HTML, 키보드 접근, pending·disabled 처리, dialog focus 복귀 로직을 보존했다.
+- 모든 버튼을 primary 색으로 만드는 제안은 이후 `board-density`에서 정의할 액션 위계와 충돌하므로 기각하고 neutral foundation 상태만 정리했다.
+- 외부 UI 라이브러리, CSS-in-JS, 새 상태 저장소, toast, 범용 UI 컴포넌트 추상화는 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 21개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 70개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 브라우저 및 사용자 검증
+
+- 1440px, 1024px, 768px에서 body 수평 overflow가 없고 보드 내부 가로 스크롤이 유지되는지 확인했다.
+- keyboard focus-visible, hover, disabled 표현과 native 상세 dialog 종료 후 트리거로 focus가 복귀하는 동작을 확인했다.
+- 브라우저 console warning·error가 없음을 확인했다.
+- 대비 계산 결과 본문/표면 16.27:1, 보조 텍스트/표면 6.43:1, 보조 텍스트/disabled 표면 5.46:1, focus/표면 5.17:1이었다.
+- 사용자 확인: 키보드 focus, hover, disabled 표현, 768px 보드 스크롤, 상세 focus 복귀 항목을 확인 완료했다고 보고했다.
+- 제한: forced-colors 전용 수동 검증은 수행하지 않았다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- committed `main`의 `507373052025e04cc8eecefe8b4b2bb373d611aa`와 현재 두 CSS 파일의 diff를 검토했고 blocker, major, minor 지적은 없었다.
+- JSX, 동작 로직, dependency, lockfile, 다른 feature scope가 변경되지 않았음을 확인했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(design-foundation): 채용 보드의 시각 토큰과 기본 컨트롤 정리
+
+  - 실제 사용하는 색상·간격·타이포·radius·border·shadow 토큰 정의
+  - native button, input, select의 hover·focus-visible·disabled 상태 개선
+  - 기존 semantic HTML과 focus·pending 계약 및 보드 내부 스크롤 유지
+  ```
+
+- 해시: 최종 동기화 대기
