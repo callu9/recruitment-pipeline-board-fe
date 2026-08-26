@@ -26,6 +26,7 @@ Before any change, read:
 - Never squash, amend away meaningful history, rebase published history, or force-push.
 - Never fabricate commands, test output, browser verification, or AI review findings.
 - Do not claim a requirement is satisfied merely because code exists; show how it was verified.
+- After implementation and verification, run `prompt-record` without a separate user request and include the current scope's `PROMPTS.md` section in the same diff before reporting completion.
 
 ## Architecture constraints
 
@@ -44,9 +45,11 @@ Before any change, read:
 
 - The user will provide or preserve the actual prompt text.
 - Do not rewrite `PROMPTS.md` as though the user verified something they did not verify.
-- You may propose an `AI 출력 요지`, but the user owns the final `리뷰 / 검증` text.
+- Write an evidence-grounded `AI 출력 요지` and `리뷰 / 검증` draft automatically; the user reviews it as part of the complete diff and owns the final text.
 - Each feature commit must include its corresponding `PROMPTS.md` section.
 - Use the same scope name in the prompt heading and commit message, for example `[stage-move]` and `feat(stage-move): ...`.
+- During feature work, update only the current scope's prompt section and leave its hash as `최종 동기화 대기`; do not backfill earlier sections.
+- During `[submission-review]`, resolve and update all earlier pending hashes in one batch. Match both the planned subject and exact scope; stop on a missing or ambiguous commit rather than guessing.
 - Any important assumption, adopted proposal, rejected proposal, or unfinished scope belongs in `DECISIONS.md`.
 
 ## Verification before requesting a commit

@@ -13,6 +13,15 @@ const scriptPath = join(
 )
 const skillPath = join(dirname(fileURLToPath(import.meta.url)), 'SKILL.md')
 const promptsPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'PROMPTS.md')
+const agentsPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'AGENTS.md')
+const commitPlanPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'docs',
+  'IMPLEMENTATION_AND_COMMIT_PLAN.md',
+)
 
 async function createWorkspace(logs) {
   const workspace = await mkdtemp(join(tmpdir(), 'prompt-record-skill-'))
@@ -67,15 +76,22 @@ test('fails instead of selecting another log when the requested file is missing'
   assert.doesNotMatch(result.stdout, /side conversation/)
 })
 
-test('requires full commit-message backfill and a body-bearing planned-message template', async () => {
-  const [skill, prompts] = await Promise.all([
+test('records the current feature automatically and defers hash sync to submission review', async () => {
+  const [skill, prompts, agents, commitPlan] = await Promise.all([
     readFile(skillPath, 'utf8'),
     readFile(promptsPath, 'utf8'),
+    readFile(agentsPath, 'utf8'),
+    readFile(commitPlanPath, 'utf8'),
   ])
 
-  assert.match(skill, /git show -s --format=%B <short-hash>/)
-  assert.match(skill, /제목·본문·해시/)
+  assert.match(skill, /Feature record mode/)
+  assert.match(skill, /Final hash sync mode/)
+  assert.doesNotMatch(skill, /immediately previous feature section/)
+  assert.match(skill, /planned commit subject/)
+  assert.match(agents, /without a separate user request/)
+  assert.match(commitPlan, /submission-review.*한 번에 동기화/s)
   assert.match(prompts, /- 예정 메시지:/)
   assert.match(prompts, /- 무엇:/)
   assert.match(prompts, /- 왜:/)
+  assert.match(prompts, /- 해시: 최종 동기화 대기/)
 })
