@@ -1095,6 +1095,223 @@ PROMPTS 자동작성 및 여러 해시를 마지막에 한번에 동기화하기
 - 해시: 최종 동기화 대기
 - AI 초안 수정 요약: scope 단독 해시 매칭을 예정 제목과 scope 동시 매칭으로 좁혀 반복 scope의 모호성을 제거했다.
 
+## [optimistic-update] 즉시 단계 반영과 엔티티 단위 실패 롤백
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-04, FR-08
+- 이번 기능에서 완료한 범위: TanStack Query cache 기반 낙관적 stage 변경, 대상 엔티티 단위 rollback·서버 응답 병합, 동일 ID synchronous pending guard, 다른 ID 병렬 이동, 접근 가능한 실패 알림과 관련 테스트
+- 이번 기능에서 하지 않은 범위: Undo, 검색·필터, 상세 패널, 조회 상태 UI, 가상화·사전 성능 최적화, mutation 뒤 전체 refetch, 새 상태 관리 라이브러리, 커밋
+
+### 프롬프트 1 — 최초 지시
+
+```text
+stage-move 완료 검증 후
+AGENTS.md와 docs/PRD.md, docs/TECH_SPEC.md,
+docs/IMPLEMENTATION_AND_COMMIT_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 코드를 읽어라.
+
+이번 작업 scope는 optimistic-update 하나뿐이다.
+연결 요구사항은 FR-04와 FR-08이다.
+
+완료 기준:
+- 단계 이동 직후 API 응답 전에도 카드가 목표 컬럼에 보인다.
+- PATCH 실패 시 실패한 지원자 한 건만 이전 stage로 복원한다.
+- PATCH 성공 시 서버가 반환한 Applicant를 TanStack Query cache에 병합한다.
+- 동일 지원자의 이동 요청은 처리 중 추가 실행되지 않는다.
+- 버튼 disabled만 믿지 않고 synchronous pending guard로 빠른 이중 실행도 차단한다.
+- 서로 다른 지원자는 동시에 이동할 수 있다.
+- 실패 메시지는 사용자가 인지할 수 있는 role="alert"로 제공한다.
+- 전체 목록 snapshot rollback을 사용하지 않는다.
+- 낙관적 성공, 실패 롤백, A 실패/B 성공, 동일 카드 중복 차단을 테스트한다.
+
+이번 작업에서 하지 않을 것:
+- Undo
+- 검색·필터, 상세 패널, 조회 상태 UI
+- 1,000건 가상화 또는 측정 전 성능 최적화
+- mutation 완료 후 무조건 전체 목록 refetch
+- 새 상태 관리 라이브러리, 범위 밖 리팩터링, 커밋
+
+제약:
+- 지원자 목록은 TanStack Query cache가 유일한 진실 공급원이다.
+- onMutate에서 이전 전체 배열이 아니라 previousApplicant 한 건만 context에 저장한다.
+- onError에서는 해당 지원자만 복원한다.
+- onSuccess에서는 서버 응답 Applicant 한 건만 병합한다.
+- onSettled에서 pending ref와 렌더링용 pending 상태에서 해당 ID만 제거한다.
+- 동일 ID는 pending ref에 먼저 즉시 추가한 뒤 mutation을 실행한다.
+- 다른 ID는 막지 않는다.
+- 기존 stage-move의 명시적 select + 이동 button UI를 재사용한다.
+- 관련 없는 파일은 수정하지 않는다.
+
+편집 전에 다음을 출력해라.
+1. 현재 코드에서 재사용할 query, mutation, API, 카드 이동 UI
+2. 수정·생성할 파일과 각 책임
+3. pending guard부터 onMutate/onError/onSuccess/onSettled까지의 알고리즘
+4. API 실패 전 저장소 불변, A 실패/B 성공, 동일 카드 빠른 두 번 실행의 경계 시나리오
+5. 먼저 실패를 확인할 테스트 계획
+6. 범위를 넘는 제안과 제외 이유
+
+그 뒤 optimistic-update 범위만 최소 구현해라.
+구현 후 변경 파일, diff 요약, 실제 실행한 명령과 결과, 수동 검증 항목,
+알려진 한계를 보고하고 멈춰라. 커밋하지 마라.
+```
+
+### 후속 프롬프트 2 — 미커밋 diff 리뷰
+
+```text
+현재 브랜치의 미커밋 diff를 리뷰해라. 파일은 수정하지 마라.
+
+대상 scope는 optimistic-update이고 연결 요구사항은 FR-04, FR-08이다.
+
+우선순위:
+1. onMutate가 API 응답 전 대상 카드만 목표 stage로 바꾸는가
+2. onError가 전체 목록이 아닌 previousApplicant 한 건만 복원하는가
+3. A 실패가 B의 성공 또는 pending 상태를 덮지 않는가
+4. 동일 카드의 빠른 두 번 실행이 PATCH 한 번으로 제한되는가
+5. 다른 카드의 요청은 병렬로 가능한가
+6. pending guard가 렌더링 전 이벤트에도 동작하는 synchronous ref 기반인가
+7. onSuccess가 서버 응답을 병합하는가
+8. onSettled가 실패·성공 모두에서 pending ID를 해제하는가
+9. 실패 메시지가 role="alert"로 접근 가능한가
+10. 무조건 refetch, 목록 복제 상태, 불필요한 의존성·추상화가 없는가
+11. 테스트가 통과해도 놓칠 반례가 있는가
+
+각 지적은 아래 형식으로 작성해라.
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 왜 문제인지
+- 최소 수정안
+
+문제가 없으면, 확인한 범위와 아직 검증하지 못한 범위를 분리해라.
+```
+
+### 후속 프롬프트 3 — 리뷰 지적 수정
+
+```text
+방금 optimistic-update 리뷰에서 확인된 blocker와 major를 최소 수정안으로 수정해라.
+
+이번 작업은 FR-04, FR-08 범위를 벗어나지 않는다.
+Undo, 검색·필터, 상세 패널, 가상화, 전역 상태 라이브러리는 추가하지 마라.
+
+수정 전에 각 지적의 원인과 최소 수정 파일을 짧게 제시해라.
+수정 후 아래 검증을 실제로 실행하고 결과를 보고해라.
+
+- 낙관적 이동 성공 테스트
+- PATCH 실패 후 엔티티 단위 롤백 테스트
+- A 실패/B 성공 동시 이동 테스트
+- 동일 카드 빠른 두 번 실행 시 PATCH 1회 테스트
+- 서로 다른 카드 동시 이동 테스트
+- npm run lint
+- npm run test
+- npm run build
+
+변경 파일, 수정한 지적, 실제 명령 결과, 남은 미검증 사항을 보고한 뒤 멈춰라.
+커밋하지 마라.
+```
+
+### 후속 프롬프트 4 — 수동 브라우저 검증 항목
+
+```text
+optimistic-update 구현의 수동 브라우저 검증 항목만 정리해라.
+파일은 수정하지 마라.
+
+아래 각각에 대해 조작 순서와 기대 결과를 한 줄씩 작성해라.
+
+- 지연된 PATCH 응답 전 카드가 목표 컬럼으로 즉시 이동함
+- PATCH 강제 실패 후 해당 카드만 원래 컬럼으로 복원됨
+- A는 실패, B는 성공할 때 B는 목표 컬럼에 남음
+- 동일 카드 이동 버튼을 빠르게 두 번 실행해도 요청이 한 번만 발생함
+- 서로 다른 두 카드는 동시에 이동 가능함
+- pending 중 이동 컨트롤이 비활성화되고 처리 상태가 전달됨
+- 실패 메시지가 화면과 스크린리더에 전달됨
+- 성공 뒤 새로고침해 mock 저장소와 화면이 일치함
+
+실제로 수행하지 않은 항목은 검증 완료로 표시하지 마라.
+```
+
+### 후속 프롬프트 5 — 수동 결과와 스테이징 요청
+
+```text
+브라우저 검증 항목 결과 안내
+
+강제실패 '단계 이동을 저장하지 못했습니다.' 확인하였고\
+PATCH 강제 실패 후 실패 알림을 확인했고, 최종적으로 카드는 원래 컬럼에 있었다. 즉시 목표 컬럼으로 이동했다가 복원되는 중간 프레임은 육안으로 분리해 확인하지 못했다.
+
+A 실패/B 성공은 단계 저장 중 메세지 뜨고, 저장하지 못했다는 메세지 확인했다.
+
+동일 카드 중복은 PATCH 요청 한번만 실행 확인하였다.
+
+서로 다른 카드 병렬도 각각 독립적으로 이동하는 것을 확인했다.
+
+pending UI, 실패알림, 성공 영속성까지 완료했다
+```
+
+### AI 출력 요지
+
+- `useMoveApplicantStage` hook에 PATCH mutation lifecycle을 모아, `onMutate`에서 대상 Applicant만 즉시 stage 교체하고 `previousApplicant` 한 건만 context에 저장했다.
+- `onError`와 `onSuccess`는 각각 이전 엔티티와 서버 응답 엔티티만 cache에 병합하며, 전체 배열 snapshot rollback이나 settled refetch를 추가하지 않았다.
+- ref와 렌더링용 Set을 함께 써 같은 ID는 동기적으로 차단하고, 다른 ID는 독립적으로 pending 처리했다.
+- 최초 테스트가 응답 전 상태와 A/B 응답 순서를 결정적으로 증명하지 못한다는 리뷰를 반영해, deferred PATCH 응답 기반 통합 테스트로 보강했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독·리뷰
+
+- 유지:
+  - 지원자 목록 원본은 `['applicants']` TanStack Query cache만 사용한다.
+  - `replaceApplicant`와 `moveApplicantOptimistically`는 불변 순수 함수이며 대상 외 엔티티를 그대로 유지한다.
+  - `move()`는 mutation 실행 전 `pendingIdsRef`에 ID를 즉시 넣어 렌더 이전의 중복 submit도 막는다.
+- 수정:
+  - 지연 시간만 사용해 성공을 확인하던 테스트를 deferred 응답으로 변경해, 응답 resolve 전에 목표 컬럼과 pending 상태를 확인했다.
+  - A/B 테스트는 B를 pending으로 둔 다음 A 실패를 resolve하고, A만 복원되는지와 B의 pending·성공 상태를 순서대로 확인하도록 변경했다.
+  - 성공·실패 모두 `onSettled` 뒤 form의 `aria-busy="false"`를 확인하도록 보강했다.
+- 기각:
+  - 전체 목록 snapshot rollback, 무조건 refetch, 요청 큐, Undo, 별도 전역 상태 라이브러리.
+
+#### 2. 자동 검증
+
+- RED:
+  - `applicantCache` 모듈이 없는 상태와 기존 비낙관적 지연 기대 때문에 focused test가 실패하는 것을 확인했다.
+  - 테스트 보강 중 fixture 이름과 selector 불일치로 focused test가 실패했으며, production 동작이 아닌 test selector를 정정했다.
+- GREEN:
+  - `npm run test -- src/features/recruitment-board/model/applicantCache.test.ts src/App.test.tsx`: 12개 테스트 통과.
+  - `npm run test -- src/App.test.tsx`: 10개 테스트 통과.
+  - 낙관적 성공, 실패 rollback, A 실패/B 성공, 동일 카드 중복 차단 focused test를 각각 실행해 모두 1개 테스트 통과.
+  - `npm run lint`: 통과.
+  - `npm run test`: 7개 파일, 47개 테스트 통과.
+  - `npm run build`: 통과. 500kB 초과 chunk 경고는 유지됐다.
+  - `git diff --check`: 통과.
+
+#### 3. 수동 검증
+
+- assistant 브라우저 검증:
+  - 지원자 001 이동 직후 target form의 select/button disabled, `aria-busy="true"`, “단계를 저장하는 중입니다.” 문구를 확인했다.
+  - 성공 뒤 새로고침 후 지원자 001이 목표 컬럼에 남아 localStorage mock 저장소와 화면이 일치함을 확인했다.
+- 사용자 보고:
+  - 강제 PATCH 실패 뒤 “단계 이동을 저장하지 못했습니다.” 알림과 최종 원래 컬럼 복귀를 확인했다. 즉시 목표 컬럼으로 이동했다가 복원되는 중간 프레임은 육안으로 분리하지 못했다.
+  - A 실패/B 성공, 동일 카드 요청 1회, 서로 다른 두 카드의 독립 이동, pending UI, 실패 알림, 성공 영속성을 확인했다고 보고했다.
+
+#### 4. 최종 판단
+
+- 수정 후 채택 제안.
+- 자동화로 확인한 범위: 낙관적 성공·실패 rollback, 결정적 A/B interleaving, 동일 ID guard, 단건 cache 병합, lint/test/build.
+- 남은 위험: 브라우저에서 강제 실패 시 낙관적 이동과 rollback 사이의 중간 프레임은 사용자 육안으로 분리 검증되지 않았으며, 제어된 통합 테스트로 보완했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(optimistic-update): 즉시 단계 반영과 엔티티 단위 실패 롤백
+
+  - Query cache에서 대상 지원자만 낙관적으로 변경
+  - 실패 시 이전 지원자 엔티티만 복원해 동시 이동 결과 보호
+  - synchronous pending guard로 동일 카드의 중복 이동 차단
+  ```
+
+- 해시: 최종 동기화 대기
+- AI 초안 수정 요약: 응답 순서를 제어하는 통합 테스트로 낙관적 상태와 엔티티 rollback 경계를 실제로 검증했다.
+
 ## 기능 기록 템플릿
 
 아래 블록을 기능마다 복사한다. 제출 전 빈 템플릿은 제거한다.

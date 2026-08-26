@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, expect, test } from 'vitest'
 import App from './App'
@@ -171,9 +171,20 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
   })
 })
 
-test('keeps an applicant in the current column until a delayed stage PATCH succeeds', async () => {
-  localStorage.clear()
-  setMockApiTestConfig({ delayMs: 50, failureRate: 0 })
+test('moves an applicant to the target column before a delayed stage PATCH succeeds', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  let resolveSuccess: (response: Response) => void = () => undefined
+  server.use(
+    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
+    http.patch('*/api/applicants/:applicantId/stage', () =>
+      new Promise<Response>((resolve) => {
+        resolveSuccess = resolve
+      }),
+    ),
+  )
   const { container } = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <App />
@@ -182,13 +193,16 @@ test('keeps an applicant in the current column until a delayed stage PATCH succe
 
   const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '지원자 001 단계 이동' })
+  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
 
-  expect(within(documentReviewColumn).getByRole('heading', { name: '지원자 001' })).toBeInTheDocument()
-  expect(within(interviewColumn).queryByRole('heading', { name: '지원자 001' })).not.toBeInTheDocument()
-  expect(await within(interviewColumn).findByRole('heading', { name: '지원자 001' })).toBeInTheDocument()
+  expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
+  expect(within(documentReviewColumn).queryByRole('heading', { name: '김민지' })).not.toBeInTheDocument()
+  const pendingForm = within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })
+  expect(pendingForm).toHaveAttribute('aria-busy', 'true')
+  resolveSuccess(HttpResponse.json({ ...applicant, stage: 'INTERVIEW' }))
+  await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
 })
 
 test('keeps the applicant in the current stage and shows feedback when a stage PATCH fails', async () => {
@@ -204,10 +218,13 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
     skills: ['React'],
     note: '',
   }
+  let resolveFailure: (response: Response) => void = () => undefined
   server.use(
     http.get('*/api/applicants', () => HttpResponse.json([applicant])),
     http.patch('*/api/applicants/:applicantId/stage', () =>
-      HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }),
+      new Promise<Response>((resolve) => {
+        resolveFailure = resolve
+      }),
     ),
   )
 
@@ -218,13 +235,96 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
   )
 
   const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
 
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
 
+  expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
+  resolveFailure(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
   expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못했습니다.')
   expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
+  await waitFor(() => expect(within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
+})
+
+test('restores only the failed applicant when another applicant move succeeds', async () => {
+  const applicants: Applicant[] = [
+    {
+      id: 'applicant-a', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+    },
+    {
+      id: 'applicant-b', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
+    },
+  ]
+  let resolveA: (response: Response) => void = () => undefined
+  let resolveB: (response: Response) => void = () => undefined
+  let patchRequests = 0
+  server.use(
+    http.get('*/api/applicants', () => HttpResponse.json(applicants)),
+    http.patch('*/api/applicants/:applicantId/stage', ({ params }) => {
+      patchRequests += 1
+      return new Promise<Response>((resolve) => {
+        if (params.applicantId === 'applicant-a') resolveA = resolve
+        else resolveB = resolve
+      })
+    },
+    ),
+  )
+  const { container } = render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>,
+  )
+  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const interviewColumn = within(container).getByRole('region', { name: '면접' })
+  const aForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
+  const bForm = within(documentReviewColumn).getByRole('form', { name: '이준호 단계 이동' })
+
+  for (const form of [aForm, bForm]) {
+    fireEvent.change(within(form).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
+    fireEvent.click(within(form).getByRole('button', { name: '이동' }))
+  }
+
+  expect(await within(interviewColumn).findByText('이준호')).toBeInTheDocument()
+  expect(within(interviewColumn).getByText('김민지')).toBeInTheDocument()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(patchRequests).toBe(2)
+  resolveA(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
+
+  expect(await within(documentReviewColumn).findByText('김민지')).toBeInTheDocument()
+  const pendingBForm = within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })
+  expect(pendingBForm).toHaveAttribute('aria-busy', 'true')
+  resolveB(HttpResponse.json({ ...applicants[1], stage: 'INTERVIEW' }))
+  await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
+})
+
+test('blocks a rapid second move for the same applicant while its PATCH is pending', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  let patchRequests = 0
+  server.use(
+    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
+    http.patch('*/api/applicants/:applicantId/stage', async () => {
+      patchRequests += 1
+      return new Promise(() => undefined)
+    }),
+  )
+  const { container } = render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>,
+  )
+  const form = await within(container).findByRole('form', { name: '김민지 단계 이동' })
+  fireEvent.change(within(form).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
+
+  fireEvent.submit(form)
+  fireEvent.submit(form)
+
+  expect(within(form).getByLabelText('이동할 단계')).toBeDisabled()
+  expect(within(form).getByRole('button', { name: '이동' })).toBeDisabled()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(patchRequests).toBe(1)
 })
 
 test('retries a failed applicants query only after the user requests it', async () => {

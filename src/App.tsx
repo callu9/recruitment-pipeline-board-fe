@@ -1,23 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import styles from './App.module.css'
 import { useApplicantsQuery } from './features/recruitment-board/api/useApplicantsQuery'
+import { useMoveApplicantStage } from './features/recruitment-board/api/useMoveApplicantStage'
 import { groupApplicantsByStage } from './features/recruitment-board/model/applicantSelectors'
 import { STAGES } from './features/recruitment-board/model/stages'
 import type { Applicant, ApplicantStage } from './features/recruitment-board/model/applicant.types'
 
-async function moveApplicantStage(applicantId: string, stage: ApplicantStage): Promise<Applicant> {
-  const response = await fetch(`/api/applicants/${applicantId}/stage`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stage }),
-  })
-  if (!response.ok) throw new Error('단계 이동을 저장하지 못했습니다.')
-
-  return response.json()
-}
-
-function StageMoveForm({ applicant, onMove }: { applicant: Applicant; onMove: (stage: ApplicantStage) => void }) {
+function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage) => void }) {
   const [targetStage, setTargetStage] = useState<ApplicantStage | ''>('')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -27,10 +16,10 @@ function StageMoveForm({ applicant, onMove }: { applicant: Applicant; onMove: (s
   }
 
   return (
-    <form className={styles.moveForm} aria-label={`${applicant.name} 단계 이동`} onSubmit={handleSubmit}>
+    <form className={styles.moveForm} aria-label={`${applicant.name} 단계 이동`} aria-busy={isPending} onSubmit={handleSubmit}>
       <label>
         이동할 단계
-        <select value={targetStage} onChange={(event) => setTargetStage(event.target.value as ApplicantStage)}>
+        <select disabled={isPending} value={targetStage} onChange={(event) => setTargetStage(event.target.value as ApplicantStage)}>
           <option value="">단계 선택</option>
           {STAGES.filter((stage) => stage.code !== applicant.stage).map((stage) => (
             <option key={stage.code} value={stage.code}>
@@ -39,7 +28,7 @@ function StageMoveForm({ applicant, onMove }: { applicant: Applicant; onMove: (s
           ))}
         </select>
       </label>
-      <button type="submit" disabled={!targetStage}>
+      <button type="submit" disabled={!targetStage || isPending}>
         이동
       </button>
     </form>
@@ -48,19 +37,7 @@ function StageMoveForm({ applicant, onMove }: { applicant: Applicant; onMove: (s
 
 function App() {
   const { data: applicants = [], isError, refetch } = useApplicantsQuery()
-  const queryClient = useQueryClient()
-  const [moveError, setMoveError] = useState('')
-  const moveMutation = useMutation({
-    mutationFn: ({ applicantId, stage }: { applicantId: string; stage: ApplicantStage }) =>
-      moveApplicantStage(applicantId, stage),
-    onSuccess: (updatedApplicant) => {
-      setMoveError('')
-      queryClient.setQueryData<Applicant[]>(['applicants'], (current = []) =>
-        current.map((applicant) => (applicant.id === updatedApplicant.id ? updatedApplicant : applicant)),
-      )
-    },
-    onError: () => setMoveError('단계 이동을 저장하지 못했습니다.'),
-  })
+  const { move, moveError, pendingIds } = useMoveApplicantStage()
   const applicantsByStage = groupApplicantsByStage(applicants)
 
   return (
@@ -74,6 +51,10 @@ function App() {
         )}
       </header>
       {moveError && <p role="alert">{moveError}</p>}
+      {[...pendingIds].map((applicantId) => {
+        const applicant = applicants.find((current) => current.id === applicantId)
+        return applicant ? <p key={applicant.id}>{applicant.name}님의 단계를 저장하는 중입니다.</p> : null
+      })}
       <div className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
         <div className={styles.board}>
           {STAGES.map((stage, index) => (
@@ -93,9 +74,8 @@ function App() {
                     <p>현재 단계: {stage.label}</p>
                     <StageMoveForm
                       applicant={applicant}
-                      onMove={(targetStage) => {
-                        void moveMutation.mutateAsync({ applicantId: applicant.id, stage: targetStage }).catch(() => undefined)
-                      }}
+                      isPending={pendingIds.has(applicant.id)}
+                      onMove={(targetStage) => move(applicant.id, targetStage)}
                     />
                   </article>
                 ))}
