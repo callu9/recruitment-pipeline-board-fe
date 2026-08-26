@@ -1814,6 +1814,120 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 - 해시: `9caa7da`
 - AI 초안 수정 요약: 초기 상태에서도 빈 보드를 렌더링하던 기존 흐름을 상태 우선순위 분기로 교체했다.
 
+## [fix(a11y-live-status)] 단계 이동 라이브 상태 메시지
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-04, FR-11
+- 진행·성공 메시지를 polite live region으로, 실패 메시지를 rollback 사실을 포함한 alert로 전달한다.
+- A 실패 뒤 B 성공에도 실패 alert와 성공 status가 각각 유지된다.
+- 기존 Query cache 기반 낙관적 업데이트·엔티티 단위 rollback·동일 ID synchronous pending guard를 변경하지 않는다.
+
+### 프롬프트 1 — 최초 지시
+
+```text
+이번 작업 scope는 fix(a11y-live-status) 하나뿐이다.
+연결 요구사항은 FR-04와 FR-11이다.
+
+현재 문제:
+
+- 진행 중 문구가 일반 p여서 라이브 리전이 아니다.
+- 성공 메시지가 없다.
+- 지원자 A의 이동 실패 후 지원자 B가 성공하면, B의 onSuccess가 A의 실패 alert를 지운다.
+
+완료 기준:
+
+- 이동 진행 문구가 role="status" 또는 동등한 polite live region으로 전달된다.
+- 성공한 이동은 지원자 이름과 목표 단계가 포함된 성공 메시지로 전달된다.
+- 실패 메시지는 role="alert"이며 “이전 상태로 복원” 사실을 포함한다.
+- A 실패 뒤 B 성공에도 A의 실패 alert는 유지된다.
+- 성공 메시지와 실패 메시지는 별도 상태로 관리한다.
+- 기존 낙관적 업데이트, 단건 rollback, 동일 ID synchronous guard, 다른 ID 병렬 이동을 바꾸지 않는다.
+- 새 라이브러리, toast 시스템, 전역 상태, 자동 소멸 타이머는 추가하지 않는다.
+- 관련 테스트와 PROMPTS.md의 현재 scope 기록을 같은 diff에 포함한다.
+- 커밋하지 않는다.
+```
+
+### 프롬프트 2 — 미커밋 diff 리뷰와 보완
+
+```text
+현재 브랜치의 미커밋 diff를 리뷰해라. 파일은 수정하지 마라.
+
+대상 scope는 fix(a11y-live-status)이고 연결 요구사항은 FR-04, FR-11이다.
+
+우선순위:
+
+1. 진행·성공 메시지가 role="status" 또는 aria-live="polite"로 전달되는가
+2. 실패 메시지가 role="alert"이며 rollback 사실을 알리는가
+3. A 실패 후 B 성공이 A의 실패 alert를 지우지 않는가
+4. 성공·실패 상태가 서로 다른 이동 요청에서도 독립적인가
+5. 기존 entity 단위 rollback과 동일 ID synchronous guard가 유지되는가
+6. 중첩 interactive 요소, 이름 없는 컨트롤, 색상만 의존한 pending 표시가 없는가
+7. toast 라이브러리·전역 상태·타이머 같은 불필요한 확장이 없는가
+8. 테스트가 통과해도 놓치는 경쟁 상태 반례가 있는가
+
+방금 fix(a11y-live-status) 리뷰에서 확인된 minor를 최소 수정해라.
+```
+
+### AI 출력 요지
+
+- 이동 mutation의 cache·rollback·pending guard는 유지하고, 성공·실패 결과를 App의 별도 로컬 state로 전달했다.
+- pending과 success는 `role="status"`, 실패는 `role="alert"`로 렌더링했다. 실패 문구에는 이전 상태 복원 사실을 명시했다.
+- A 실패 뒤 B 성공 시 alert 유지와 B의 success status가 동시에 보이는 회귀 assertion을 추가했다.
+
+### 리뷰 / 검증
+
+#### 1. 코드 정독·리뷰
+
+- 원인: 기존 `useMoveApplicantStage`의 단일 `moveError`를 `onSuccess`가 비워, 다른 지원자의 성공이 실패 alert를 지웠다.
+- 수정: error state와 success state를 App에서 분리했다. 성공 콜백은 error state를 건드리지 않는다.
+- 유지: `previousApplicant` 한 건만 `replaceApplicant`로 복원하고, `pendingIdsRef`의 동기 guard와 카드별 `aria-busy`·disabled를 보존했다.
+- 리뷰 보완: A 실패·B 성공 테스트가 alert만 확인하던 빈틈을 발견해 B의 `role="status"`도 확인하도록 보강했다.
+- 기각: toast 라이브러리, 전역 상태, 자동 소멸 타이머, rollback/guard 재설계는 요구사항에 필요하지 않아 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- RED: `npm run test -- src/App.test.tsx`에서 success status 부재, pending의 status 부재, rollback 문구 부재, A 실패 alert 유지 미검증 조건으로 4개 테스트 실패를 확인했다.
+- focused 실행:
+  - A 실패 → B 성공 후 alert와 success status: 통과
+  - 성공 status: 통과
+  - pending live region: 통과
+  - 동일 ID 중복 차단: 통과
+- 전체 실행:
+  - `git diff --check`: 통과
+  - `npm run lint`: 통과
+  - `npm run test`: Vitest 7개 파일, 59개 테스트 통과
+  - `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+
+#### 3. 수동 검증
+
+- 사용자 완료 검증: `docs/LOCAL_BROWSER_TESTING.md` 절차로 다음을 실제 브라우저에서 확인했다.
+  - 키보드 상세 열기·닫기와 키보드 단계 이동
+  - pending status, select/button disabled, form의 `aria-busy="true"`
+  - 강제 성공 status와 강제 실패 rollback alert·카드 위치 복원
+  - A 실패 뒤 B 성공에도 A alert 유지
+  - 같은 카드 빠른 두 번 실행 차단과 서로 다른 카드 동시 이동
+- VoiceOver를 켠 상태에서 pending status가 안내되는 것도 확인했다.
+
+#### 4. 최종 판단
+
+- 수정 후 채택: 진행·성공·실패 메시지의 라이브 리전 역할, rollback 안내, A 실패/B 성공 동시 메시지 보존을 자동 테스트로 확인했다.
+- 남은 위험: 동시 pending 카드가 여러 개이면 여러 status region이 생성된다. 이번 scope는 카드별 병렬 이동 허용 계약을 유지한다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  fix(a11y-live-status): 이동 상태 알림 접근성 보완
+
+  - 진행·성공·실패 상태를 라이브 리전으로 전달
+  - 성공 요청이 다른 카드의 실패 alert를 지우지 않도록 상태 분리
+  - A 실패/B 성공 경쟁 상태 회귀 테스트 추가
+  ```
+
+- 해시: 최종 동기화 대기
+
 ## [submission-review] 제출 전 프롬프트 기록 정합성 검토
 
 ### 목표 / 수용 기준

@@ -258,6 +258,7 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
   expect(await within(interviewColumn).findByText('김민지')).toBeInTheDocument()
   expect(requestBody).toEqual({ stage: 'INTERVIEW' })
   expect(within(documentReviewColumn).queryByText('김민지')).not.toBeInTheDocument()
+  expect(await screen.findByRole('status')).toHaveTextContent('김민지님을 면접(으)로 이동했습니다.')
 })
 
 test('keeps a successfully moved applicant after the app is rendered again', async () => {
@@ -319,6 +320,7 @@ test('moves an applicant to the target column before a delayed stage PATCH succe
   expect(within(documentReviewColumn).queryByRole('heading', { name: '김민지' })).not.toBeInTheDocument()
   const pendingForm = within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })
   expect(pendingForm).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('status')).toHaveTextContent('김민지님의 단계를 저장하는 중입니다.')
   resolveSuccess(HttpResponse.json({ ...applicant, stage: 'INTERVIEW' }))
   await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
 })
@@ -361,7 +363,7 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
 
   expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
   resolveFailure(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못했습니다.')
+  expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
   expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
   await waitFor(() => expect(within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
 })
@@ -411,10 +413,13 @@ test('restores only the failed applicant when another applicant move succeeds', 
   resolveA(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
 
   expect(await within(documentReviewColumn).findByText('김민지')).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
   const pendingBForm = within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })
   expect(pendingBForm).toHaveAttribute('aria-busy', 'true')
   resolveB(HttpResponse.json({ ...applicants[1], stage: 'INTERVIEW' }))
   await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
+  expect(screen.getByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
+  expect(screen.getByRole('status')).toHaveTextContent('이준호님을 면접(으)로 이동했습니다.')
 })
 
 test('blocks a rapid second move for the same applicant while its PATCH is pending', async () => {

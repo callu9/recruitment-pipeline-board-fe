@@ -15,11 +15,13 @@ async function moveApplicantStage(applicantId: string, stage: ApplicantStage): P
   return response.json()
 }
 
-export function useMoveApplicantStage() {
+export function useMoveApplicantStage({ onError, onSuccess }: {
+  onError: () => void
+  onSuccess: (applicant: Applicant) => void
+}) {
   const queryClient = useQueryClient()
   const pendingIdsRef = useRef(new Set<string>())
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
-  const [moveError, setMoveError] = useState('')
   const mutation = useMutation({
     mutationFn: ({ applicantId, targetStage }: { applicantId: string; targetStage: ApplicantStage }) =>
       moveApplicantStage(applicantId, targetStage),
@@ -39,11 +41,11 @@ export function useMoveApplicantStage() {
           replaceApplicant(current, context.previousApplicant),
         )
       }
-      setMoveError('단계 이동을 저장하지 못했습니다.')
+      onError()
     },
     onSuccess: (updatedApplicant) => {
-      setMoveError('')
       queryClient.setQueryData<Applicant[]>(applicantsQueryKey, (current = []) => replaceApplicant(current, updatedApplicant))
+      onSuccess(updatedApplicant)
     },
     onSettled: (_data, _error, { applicantId }) => {
       pendingIdsRef.current.delete(applicantId)
@@ -63,5 +65,5 @@ export function useMoveApplicantStage() {
     mutation.mutate({ applicantId, targetStage })
   }
 
-  return { move, moveError, pendingIds }
+  return { move, pendingIds }
 }

@@ -71,10 +71,18 @@ function ApplicantDetailDialog({ applicant, onClose }: { applicant: Applicant; o
 
 function App() {
   const { data: applicants = [], isPending, isError, refetch } = useApplicantsQuery()
-  const { move, moveError, pendingIds } = useMoveApplicantStage()
   const [nameQuery, setNameQuery] = useState('')
   const [role, setRole] = useState<ApplicantRole | 'ALL'>('ALL')
   const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null)
+  const [moveSuccess, setMoveSuccess] = useState('')
+  const [moveError, setMoveError] = useState('')
+  const { move, pendingIds } = useMoveApplicantStage({
+    onError: () => setMoveError('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.'),
+    onSuccess: (applicant) => {
+      const targetStage = STAGES.find((stage) => stage.code === applicant.stage)
+      if (targetStage) setMoveSuccess(`${applicant.name}님을 ${targetStage.label}(으)로 이동했습니다.`)
+    },
+  })
   const detailTriggerRef = useRef<HTMLButtonElement>(null)
   const boardViewportRef = useRef<HTMLDivElement>(null)
   const detailScrollPositionRef = useRef({ left: 0, top: 0 })
@@ -124,9 +132,10 @@ function App() {
         </button>
       </form>
       {moveError && <p role="alert">{moveError}</p>}
+      {moveSuccess && <p role="status">{moveSuccess}</p>}
       {[...pendingIds].map((applicantId) => {
         const applicant = applicants.find((current) => current.id === applicantId)
-        return applicant ? <p key={applicant.id}>{applicant.name}님의 단계를 저장하는 중입니다.</p> : null
+        return applicant ? <p key={applicant.id} role="status">{applicant.name}님의 단계를 저장하는 중입니다.</p> : null
       })}
       {isPending ? (
         <section className={styles.state} role="region" aria-label="지원자 정보 로딩" aria-busy="true">
