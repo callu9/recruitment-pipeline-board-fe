@@ -1,6 +1,8 @@
 import { STAGES } from '../features/recruitment-board/model/stages'
 import { APPLICANT_ROLES, type Applicant } from '../features/recruitment-board/model/applicant.types'
 
+const APPLICANT_NAMES = ['김민지', 'Alex Kim', '이서준', 'Jordan Lee']
+
 export function createSeedApplicants(size = 240): Applicant[] {
   return Array.from({ length: size }, (_, index) => {
     const number = index + 1
@@ -8,7 +10,7 @@ export function createSeedApplicants(size = 240): Applicant[] {
 
     return {
       id: `applicant-${String(number).padStart(3, '0')}`,
-      name: `지원자 ${String(number).padStart(3, '0')}`,
+      name: APPLICANT_NAMES[index % APPLICANT_NAMES.length],
       role,
       appliedAt: `2026-08-${String((index % 28) + 1).padStart(2, '0')}T09:00:00.000Z`,
       stage: STAGES[index % STAGES.length].code,

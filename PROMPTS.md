@@ -2619,3 +2619,212 @@ DECISIONS.md에는 다음 결정을 기록한다.
 ```
 
 위 문장은 무엇을 어떻게 검증했는지 재현할 수 없으므로 제출용 기록으로 부족하다.
+
+## [seed-data-variety] 기본 seed의 한글·영문 이름 다양성
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-05 영문 대소문자 무시 검색의 수동 검증 보완
+- 기본 240건 seed에 결정적인 한글·영문 이름을 포함한다.
+- 유효한 기존 localStorage 배열은 유지하고, 저장 키 부재 또는 손상 시에만 혼합 seed를 생성·저장한다.
+- 기존 ID, role, appliedAt, stage, email, phone 생성 규칙과 검색 selector/UI는 변경하지 않는다.
+
+### 프롬프트 1 — 최초 지시
+
+```text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 seed-data-variety 섹션
+6. 관련 최근 커밋과 현재 코드
+
+이번 작업 scope는 seed-data-variety 하나뿐이다.
+연결 요구사항은 FR-05의 영문 대소문자 무시 검색을 실제 seed 데이터로 시연·검증할 수 있게 보완하는 것이다.
+
+변경 배경:
+
+현재 createSeedApplicants()는 모든 이름을 `지원자 001` 형식으로 생성한다.
+영문 대소문자 무시 검색은 자동 테스트 fixture로 검증됐지만,
+실제 브라우저의 기본 seed 데이터에서는 수동으로 확인할 수 없다.
+
+완료 기준:
+
+- 기본 240건 seed에 결정적인 한글·영문 지원자 이름이 모두 포함된다.
+- 같은 size를 전달하면 항상 같은 Applicant 배열을 생성한다.
+- 기존 ID, 직무, 지원일, stage, 이메일, 전화번호 생성 규칙은 불필요하게 변경하지 않는다.
+- 영문 이름은 실제 화면에서 소문자·대문자 검색을 비교할 수 있어야 한다.
+- 기존 유효한 localStorage 데이터는 loadApplicants() 호출 시 그대로 유지한다.
+- localStorage가 비어 있을 때만 새 혼합 seed가 생성·저장된다.
+- 기존 저장 키를 변경하지 않는다.
+- migration, seed versioning, 자동 reset, 데이터 초기화 UI를 추가하지 않는다.
+- 손상된 저장 데이터에 대한 기존 복구 동작은 유지한다.
+- 새 라이브러리를 추가하지 않는다.
+
+최소 구현 원칙:
+
+- src/mocks/seedApplicants.ts의 기존 index 기반 생성 방식을 유지한다.
+- 작은 고정 이름 목록을 index로 순환해 한글·영문 이름을 결정적으로 배정한다.
+- 이름 고유성을 위한 별도 ID 체계나 사람 이름 생성 라이브러리를 만들지 않는다.
+- 지원자 ID는 기존처럼 유일하게 유지하되 이름 중복은 허용한다.
+- 검색 selector와 UI는 이미 요구사항을 만족하므로 수정하지 않는다.
+- mockDb 구현은 보존 테스트가 실패하지 않는 한 수정하지 않는다.
+
+예상 변경 파일:
+
+- src/mocks/seedApplicants.ts
+  - 결정적인 한글·영문 이름 목록과 배정
+- src/mocks/seedApplicants.test.ts
+  - 혼합 이름, 결정성, size와 기존 핵심 필드 규칙 검증
+- src/mocks/mockDb.test.ts
+  - 기존 유효 localStorage 데이터가 새 seed로 교체되지 않는 회귀 테스트
+- docs/TECH\_SPEC.md
+  - 혼합 seed와 기존 저장 데이터 유지 규칙 명시
+- docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+  - seed-data-variety scope와 검증 항목 추가
+- DECISIONS.md
+  - migration·저장 키 변경 없이 신규 저장소에만 적용하는 결정 기록
+- PROMPTS.md는 사용자 검증 gate 통과 전에는 수정하지 않는다.
+
+수정하지 않을 파일:
+
+- docs/ASSIGNMENT.md
+- 기존 search-filter 코드와 PROMPTS.md의 이전 feature section
+- localStorage 저장 키
+- App UI와 검색 selector
+- stage 전이·확인 dialog 코드
+
+이번 작업에서 하지 않을 것:
+
+- 기존 localStorage 자동 초기화
+- migration 또는 seed version bump
+- 데이터 초기화 button
+- 검색 로직 변경
+- 1,000건 성능·가상화
+- 시각 리디자인·반응형
+- 실제 개인정보나 외부 데이터 사용
+- 관련 없는 리팩터링
+- 커밋
+- 사용자 검증 전 prompt-record 또는 staging
+
+편집 전에 먼저 다음을 출력해라.
+
+1. 연결 요구사항
+2. 현재 코드에서 재사용할 부분
+3. 생성·수정할 파일과 책임
+4. 이름 배정 알고리즘
+5. 빈 저장소와 기존 저장소의 데이터 흐름
+6. 결정성·혼합 이름·기존 데이터 보존 검증 시나리오
+7. 먼저 실패시킬 테스트
+8. 범위를 넘는 제안과 제외 이유
+
+테스트를 먼저 작성해 현재 seed에서 실패하는지 확인한 뒤 최소 구현해라.
+
+필수 자동 검증:
+
+- 기본 seed에 한글 이름이 존재함
+- 기본 seed에 영문 이름이 존재함
+- 같은 size의 두 결과가 완전히 같음
+- 요청한 size와 ID 유일성이 유지됨
+- 기존 stage·role 배정 규칙이 유지됨
+- 유효한 기존 localStorage 데이터가 변경되지 않음
+- 빈 localStorage에서는 새 혼합 seed가 저장됨
+- 손상된 저장 데이터의 기존 복구 동작 유지
+- 기존 검색·필터 테스트 통과
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+자동 검증 후 변경 파일, unstaged diff, 실제 명령 결과,
+수용 기준 충족 여부, 알려진 한계와 사용자 수동 검증 시나리오를 보고하고 기다려라.
+
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는
+prompt-record, staging, commit을 진행하지 마라.
+```
+
+### 프롬프트 2 — 사용자 검증 후 읽기 전용 리뷰
+
+```text
+확인 및 사용자 검증 완료.
+
+현재 브랜치의 seed-data-variety 미커밋 diff를 읽기 전용으로 리뷰해라. 파일은 수정하지 마라.
+
+연결 요구사항은 FR-05의 영문 대소문자 검색 시연 보완이다.
+
+우선순위:
+
+1. 기본 seed에 한글·영문 이름이 실제로 모두 포함되는가
+2. 같은 size에서 결과가 결정적인가
+3. 기존 ID, role, stage 등 무관한 생성 규칙을 불필요하게 바꾸지 않았는가
+4. 기존 유효 localStorage가 새 seed로 덮어써지지 않는가
+5. STORAGE\_KEY 변경이나 자동 migration이 추가되지 않았는가
+6. 빈 저장소에서만 새 seed가 저장되는가
+7. 손상 저장소의 기존 복구 동작이 유지되는가
+8. 영문 이름으로 기존 대소문자 무시 검색을 수동 검증할 수 있는가
+9. 검색 selector나 UI를 불필요하게 수정하지 않았는가
+10. 이름 생성 라이브러리, 고유 이름 생성기, seed versioning 같은 과설계가 없는가
+11. 문서와 실제 구현이 일치하는가
+12. 다른 feature scope의 코드나 기록이 섞이지 않았는가
+
+각 지적은 다음 형식으로 작성해라.
+
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 문제 원인
+- 최소 수정안
+
+추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라.
+문제가 없다면 확인한 범위와 미검증 범위를 분리해 보고해라.
+```
+
+### AI 출력 요지
+
+- 기존 index 기반 `createSeedApplicants()`에 고정 한글·영문 이름 목록을 추가하고 index modulo로 순환 배정했다.
+- 이름 외 ID, role, appliedAt, stage, email, phone 생성 규칙은 보존했다.
+- 유효 localStorage 보존, 빈 저장소 mixed seed 저장, 손상 저장소 복구를 회귀 테스트로 확인했다.
+- 반복 이름으로 인해 기존 영속성 통합 테스트가 placeholder 이름을 식별자로 사용하던 부분을, 저장된 applicant ID와 컬럼 count를 검증하도록 보정했다.
+- TECH_SPEC, 구현·커밋 계획, DECISIONS에 신규·손상 저장소에만 적용하는 범위를 기록했다.
+
+### 리뷰 / 검증
+
+#### 1. 테스트 우선과 구현 검토
+
+- RED: `npm run test -- src/mocks/seedApplicants.test.ts src/mocks/mockDb.test.ts`에서 기본 seed의 `김민지`와 `Alex Kim` 부재로 2개 테스트가 실패했다.
+- 채택: 이름 목록 4개를 index modulo로만 순환해 결정성을 유지했다. 별도 ID·사람 이름 생성기·migration·seed versioning은 추가하지 않았다.
+- 회귀 수정: 전체 테스트에서 기존 `지원자 001` 이름을 form 식별자로 사용하던 영속성 테스트가 실패했다. 반복 이름을 고유화하지 않고, 이동된 `applicant-001`의 저장 stage와 면접 컬럼 count를 확인하도록 테스트만 바꿨다.
+
+#### 2. 자동 검증
+
+- focused: `npm run test -- src/mocks/seedApplicants.test.ts src/mocks/mockDb.test.ts` — 15개 테스트 통과.
+- 검색 회귀: `npm run test -- src/features/recruitment-board/model/applicantSelectors.test.ts` — 3개 테스트 통과.
+- 전체: `npm run lint` 통과, `npm run test` — 8개 파일·76개 테스트 통과, `npm run build` 통과.
+- `git diff --check` 통과. build의 500kB 초과 chunk 경고는 기존 경고로 유지됐다.
+
+#### 3. 사용자 검증과 읽기 전용 리뷰
+
+- 사용자 확인: 사용자가 seed-data-variety 수동 검증 완료를 보고했다. 구체적인 브라우저 조작 결과는 별도로 제공되지 않았다.
+- 읽기 전용 리뷰: 혼합 이름, 결정성, 기존 저장 데이터 보존, storage key·migration·자동 reset 부재, 손상 저장소 복구, 기존 검색 selector/UI 무변경, 문서 일치와 scope 혼입 여부를 점검했고 지적 사항은 없었다.
+- 리뷰 중 관련 테스트 18개, lint, `git diff --check`를 다시 실행해 통과했다. 전체 테스트와 build는 이 읽기 전용 리뷰 단계에서는 재실행하지 않았다.
+
+#### 4. 최종 판단
+
+- 채택: 새 브라우저 저장소에서는 한글·영문 이름을 기본 seed에서 확인하고 `alex`·`ALEX` 검색을 비교할 수 있다.
+- 제한: 기존 유효 localStorage 데이터는 의도적으로 자동 갱신하지 않으므로, 이미 저장된 기존 seed에서는 영문 이름이 추가되지 않는다. 사용자가 저장 키를 제거한 새 저장소에서만 이 수동 시연이 가능하다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(seed-data-variety): 한글·영문 혼합 시드 데이터 제공
+
+  - 기본 seed에서 한글·영문 이름을 결정적으로 생성
+  - 기존 유효 localStorage를 유지하고 빈 저장소에만 새 seed 적용
+  - 실제 seed 기반 영문 대소문자 검색 검증 지원
+  ```
+
+- 해시: 최종 동기화 대기

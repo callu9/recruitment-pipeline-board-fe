@@ -374,13 +374,14 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
   )
 
   const documentReviewColumn = await within(firstRender.container).findByRole('region', { name: '서류검토' })
-  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '지원자 001 단계 이동' })
+  const moveForm = (await within(documentReviewColumn).findAllByRole('form'))[0]!
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
   confirmStageChange()
-  await within(await within(firstRender.container).findByRole('region', { name: '면접' })).findByRole('heading', {
-    name: '지원자 001',
-  })
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')).toContainEqual(
+    expect.objectContaining({ id: 'applicant-001', stage: 'INTERVIEW' }),
+  ))
+  expect(await within(firstRender.container).findByRole('region', { name: '면접' })).toHaveTextContent('49명')
 
   firstRender.unmount()
   const secondRender = render(
@@ -389,9 +390,7 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
     </QueryClientProvider>,
   )
 
-  await within(await within(secondRender.container).findByRole('region', { name: '면접' })).findByRole('heading', {
-    name: '지원자 001',
-  })
+  await within(await within(secondRender.container).findByRole('region', { name: '면접' })).findByText('49명')
 })
 
 test('moves an applicant to the target column before a delayed stage PATCH succeeds', async () => {

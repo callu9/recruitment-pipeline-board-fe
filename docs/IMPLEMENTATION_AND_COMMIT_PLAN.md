@@ -23,6 +23,7 @@
 | §3 경쟁 상태 | FR-08 | §8 | `optimistic-update` | D-005, D-007 | 구현 범위 > Should |
 | 단방향 단계 전이 정책 | FR-03 | §3, §4, §8 | `stage-transition-policy` | D-011 | 구현 범위 > Must |
 | 단계 변경 최종 확인 | FR-03 | §1, §6, §10, §12 | `stage-change-confirmation` | D-012 | 구현 범위 > Must |
+| 기본 seed의 한글·영문 이름 다양성 | FR-05 수동 검증 보완 | §5.3 | `seed-data-variety` | D-013 | 검색 수동 검증 |
 | §3 Undo | FR-09 | 운영 정책상 기각 | 없음 | D-011 | 기각 범위 |
 | §3 1,000건 성능 | FR-10 | 활성 범위 제외 | 없음 | D-006 | 제외 범위 |
 | §3 웹 접근성 | FR-11 | §10, §11 | `board-layout`, `card-list`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`; 결함 수정 시 `a11y-keyboard` | D-002 | 구현 범위 > Should |
@@ -396,7 +397,33 @@ AI 기록:
 
 여기까지를 Must + 핵심 가점 완료선으로 본다.
 
-### Commit 14 — 제출 문서 정리
+### Commit 14 — 기본 seed 이름 다양성
+
+```text
+feat(seed-data-variety): 기본 seed에 한글·영문 이름을 순환 배정
+```
+
+범위:
+
+- 연결 요구사항: FR-05 영문 대소문자 무시 검색의 수동 검증 보완
+- 기존 index 기반 240건 generator에서 작은 고정 한글·영문 이름 목록을 순환
+- 기존 ID, role, appliedAt, stage, 이메일, 전화번호 규칙 보존
+- 유효한 기존 localStorage 데이터 보존; 저장 키 부재 또는 손상 시에만 새 혼합 seed 생성·저장
+- 저장 키 변경, migration, seed versioning, 자동 reset, 데이터 초기화 UI, 검색 UI 변경은 제외
+
+검증:
+
+- 기본 seed에 한글과 영문 이름 존재
+- 같은 size의 결과 완전 동일, 요청 size와 ID 유일성 유지
+- role·stage 순환 규칙 유지
+- 유효한 기존 localStorage 데이터 불변, 빈 저장소의 mixed seed 저장, 손상 저장소 복구 유지
+- 기존 검색·필터 테스트와 lint/test/build 통과
+
+AI 기록:
+
+- `[seed-data-variety]`
+
+### Commit 15 — 제출 문서 정리
 
 ```text
 docs(submission-review): 실행·검증 방법과 설계 결정 최종 정리

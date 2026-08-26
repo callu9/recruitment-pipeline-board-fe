@@ -20,6 +20,21 @@ afterEach(() => {
 })
 
 describe('loadApplicants', () => {
+  test('preserves valid stored applicants without replacing them with seed data', () => {
+    const storedApplicants = [{ ...validApplicant, name: 'Saved Applicant', stage: 'INTERVIEW' as const }]
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedApplicants))
+
+    expect(loadApplicants()).toEqual(storedApplicants)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual(storedApplicants)
+  })
+
+  test('stores mixed seed data only when storage is empty', () => {
+    const applicants = loadApplicants()
+
+    expect(applicants.map(({ name }) => name)).toContain('Alex Kim')
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual(applicants)
+  })
+
   test.each([
     ['id', { ...validApplicant, id: 1 }],
     [
