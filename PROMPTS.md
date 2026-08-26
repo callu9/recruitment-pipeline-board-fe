@@ -1082,7 +1082,7 @@ PROMPTS 자동작성 및 여러 해시를 마지막에 한번에 동기화하기
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   chore(prompt-record-automation): 프롬프트 자동 기록과 해시 일괄 동기화 정리
@@ -1092,7 +1092,7 @@ PROMPTS 자동작성 및 여러 해시를 마지막에 한번에 동기화하기
   - 예정 제목과 scope의 단일 커밋만 허용하는 계약 테스트로 BLOCK 재발 방지
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `93108e1`
 - AI 초안 수정 요약: scope 단독 해시 매칭을 예정 제목과 scope 동시 매칭으로 좁혀 반복 scope의 모호성을 제거했다.
 
 ## [optimistic-update] 즉시 단계 반영과 엔티티 단위 실패 롤백
@@ -1299,7 +1299,7 @@ pending UI, 실패알림, 성공 영속성까지 완료했다
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(optimistic-update): 즉시 단계 반영과 엔티티 단위 실패 롤백
@@ -1309,7 +1309,7 @@ pending UI, 실패알림, 성공 영속성까지 완료했다
   - synchronous pending guard로 동일 카드의 중복 이동 차단
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `153c66b`
 - AI 초안 수정 요약: 응답 순서를 제어하는 통합 테스트로 낙관적 상태와 엔티티 rollback 경계를 실제로 검증했다.
 
 ## 기능 기록 템플릿
@@ -1463,7 +1463,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(search-filter): 이름 검색과 데이터 기반 직무 필터 구현
@@ -1473,7 +1473,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
   - 서버 저장 상태를 변경하지 않는 로컬 UI 필터로 유지
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `bb3ab4b`
 - AI 초안 수정 요약: 미검증 브라우저 성능 최적화 대신 240건 직접 계산과 자동 검증 범위만 유지했다.
 
 ## [detail-panel] 지원자 상세 다이얼로그 구현
@@ -1684,7 +1684,7 @@ dialog를 우측 full-height sheet로 고정하기 위해 position: fixed, inset
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(detail-panel): 지원자 상세 다이얼로그 제공
@@ -1694,7 +1694,7 @@ dialog를 우측 full-height sheet로 고정하기 위해 position: fixed, inset
   - 상세 필드와 닫기 동작 회귀 테스트 추가
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `969f517`
 - AI 초안 수정 요약: focus 복귀만으로 충분하다는 초안을 기각하고, 실제 브라우저에서 재현한 가로 스크롤 변경까지 복원했다.
 
 ## [ui-states] 로딩·조회 오류·전체 및 필터 빈 상태
@@ -1801,7 +1801,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(ui-states): 로딩·조회 오류·빈 상태 처리
@@ -1811,81 +1811,63 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
   - retry와 필터 초기화로 정상 보드 복귀 지원
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `9caa7da`
 - AI 초안 수정 요약: 초기 상태에서도 빈 보드를 렌더링하던 기존 흐름을 상태 우선순위 분기로 교체했다.
 
-## [feature-scope] 기능명
+## [submission-review] 제출 전 프롬프트 기록 정합성 검토
 
 ### 목표 / 수용 기준
 
-- 연결 요구사항: FR-00
-- 이번 기능에서 완료할 범위:
-- 이번 기능에서 하지 않을 범위:
+- 연결 근거: 과제 §5~7, PRD §3.2, 구현·커밋 계획 Commit 12
+- 이전 feature section의 `최종 동기화 대기` 해시를 실제 단일 커밋과 동기화한다.
+- 제출용 빈 기능 템플릿을 제거한다.
+- 구현 코드·과거 feature의 검증 주장·README·DECISIONS는 변경하지 않는다.
 
-### 프롬프트 1 — 최초 지시
+### 프롬프트 1 — 제출 전 요청
 
-(실제 프롬프트 원문)
+```text
+프롬프트 문서 정합성 작업 후 커밋,푸시
+```
 
 ### AI 출력 요지
 
-- 제안한 접근:
-- 생성·수정한 주요 파일:
-- 핵심 로직:
+- `PROMPTS.md`의 pending record 다섯 개를 조사하고, 각 scope와 예정 subject가 모두 일치하는 HEAD 도달 가능 커밋 하나를 확인했다.
+- 확인한 실제 커밋 메시지와 short hash로 record를 치환하고 제출 전 제거 대상으로 표시된 빈 템플릿을 삭제했다.
 
 ### 리뷰 / 검증
 
-#### 1. 코드 정독
+#### 1. 문서 정독
 
-- 요구 누락:
-- 잘못된 가정:
-- 불필요하거나 이해하지 못한 코드:
-- 유지한 부분과 이유:
-- 수정·기각한 부분과 이유:
+- 채택: `prompt-record-automation`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`의 planned subject와 scope가 각각 하나의 실제 커밋에만 대응함을 확인했다.
+- 기각: 이미 커밋된 feature의 코드·검증 서술·README·DECISIONS를 이 문서 정합성 scope에서 수정하지 않았다.
 
 #### 2. 자동 검증
 
-- 실행 명령:
-- 실제 결과:
-- 실패한 테스트와 원인:
+- `read-prompt-log.mjs`로 이 세션의 실제 사용자 요청을 읽었다.
+- `git log`와 `git show -s --format=%B`로 각 연결 커밋의 subject·본문을 확인했다.
+- `git diff --check`, `npm run lint`, `npm run test`, `npm run build`를 실행했다. diff whitespace 오류 없음, lint 통과, Vitest 7개 파일·59개 테스트 통과, production build 통과를 확인했다. build의 기존 500kB 초과 chunk 경고는 유지됐다.
 
 #### 3. 수동 검증
 
-- 재현 환경:
-- 확인한 성공 시나리오:
-- 확인한 실패·경계 시나리오:
-- 실제 관찰 결과:
+- 미수행: 문서·Git 메타데이터 정합성 범위라 브라우저 조작은 필요하지 않다.
 
 #### 4. 최종 판단
 
-- 그대로 채택 / 수정 후 채택 / 기각:
-- 내가 최종 책임지고 확인한 범위:
-- 미검증 또는 남은 위험:
-
-### 후속 프롬프트 2 — 수정 또는 리뷰 요청
-
-(사용했다면 실제 원문)
-
-### 후속 출력과 추가 검증
-
-- 변경 내용:
-- 추가로 발견한 문제:
-- 최종 반영 내용:
+- 수정 후 채택. 이전 pending hash와 빈 템플릿을 정리했으며, 이 `[submission-review]` 커밋 자신의 해시는 같은 커밋에 기록할 수 없으므로 의도적으로 동기화 대상에서 제외한다.
 
 ### 연결 커밋
 
 - 예정 메시지:
 
   ```text
-  type(feature-scope): 요약
+  docs(submission-review): 프롬프트 기록 정합성 동기화
 
-  - 무엇:
-  - 왜:
+  - 이전 feature record의 실제 커밋 메시지와 해시를 일괄 반영
+  - 제출용 빈 feature 템플릿을 제거
   ```
 
 - 해시: 최종 동기화 대기
-- AI 초안 수정 요약: 한 줄
-
-````
+- AI 초안 수정 요약: 코드 변경 없이 scope·subject·커밋 본문이 모두 일치하는 기록만 동기화했다.
 
 ## 좋은 리뷰 예시
 
