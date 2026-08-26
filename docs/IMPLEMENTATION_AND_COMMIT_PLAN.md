@@ -13,23 +13,23 @@
 
 | 과제 원문 | PRD | TECH_SPEC | 구현 커밋 | 관련 결정 | README |
 |---|---|---|---|---|---|
-| §2.1 보드·컬럼 | FR-01 | §10 | `board-layout` | D-001 | 구현 범위 > Must |
-| §2.1 지원자 카드 | FR-02 | §3, §10 | `card-list` | D-001 | 구현 범위 > Must |
+| §2.1 보드·컬럼 | FR-01 | §10 | `board-layout` | TECH_SPEC §0 | 구현 범위 > Must |
+| §2.1 지원자 카드 | FR-02 | §3, §10 | `card-list` | TECH_SPEC §0 | 구현 범위 > Must |
 | §2.2 단계 이동·영속화 | FR-03 | §4, §5, §8 | `stage-move` | D-002, D-004 | 구현 범위 > Must |
-| §2.3 낙관적 업데이트·롤백 | FR-04 | §8 | `optimistic-update` | D-003, D-005, D-007 | 구현 범위 > Must |
-| §2.4 이름 검색·직무 필터 | FR-05 | §9 | `search-filter` | D-006 | 구현 범위 > Must |
+| §2.3 낙관적 업데이트·롤백 | FR-04 | §8 | `optimistic-update` | D-003, D-005 | 구현 범위 > Must |
+| §2.4 이름 검색·직무 필터 | FR-05 | §9 | `search-filter` | TECH_SPEC §9 | 구현 범위 > Must |
 | §2.5 상세 보기 | FR-06 | §10 | `detail-panel` | D-002 | 구현 범위 > Must |
-| §2.6 로딩·오류·빈 상태 | FR-07 | §7, §11 | `ui-states` | D-006 | 구현 범위 > Must |
-| §3 경쟁 상태 | FR-08 | §8 | `optimistic-update` | D-005, D-007 | 구현 범위 > Should |
-| 단방향 단계 전이 정책 | FR-03 | §3, §4, §8 | `stage-transition-policy` | D-011 | 구현 범위 > Must |
-| 단계 변경 최종 확인 | FR-03 | §1, §6, §10, §12 | `stage-change-confirmation` | D-012 | 구현 범위 > Must |
-| 기본 seed의 한글·영문 이름 다양성 | FR-05 수동 검증 보완 | §5.3 | `seed-data-variety` | D-013 | 검색 수동 검증 |
-| §3 Undo | FR-09 | 운영 정책상 기각 | 없음 | D-011 | 기각 범위 |
-| §3 1,000건 성능 | FR-10 | 활성 범위 제외 | 없음 | D-006 | 제외 범위 |
-| §3 웹 접근성 | FR-11 | §10, §11 | `board-layout`, `card-list`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`; 결함 수정 시 `a11y-keyboard` | D-002 | 구현 범위 > Should |
+| §2.6 로딩·오류·빈 상태 | FR-07 | §7, §11 | `ui-states` | TECH_SPEC §0, §10 | 구현 범위 > Must |
+| §3 경쟁 상태 | FR-08 | §8 | `optimistic-update` | D-005 | 구현 범위 > Should |
+| 단방향 단계 전이 정책 | FR-03 | §3, §4, §8 | `stage-transition-policy` | D-002 | 구현 범위 > Must |
+| 단계 변경 최종 확인 | FR-03 | §1, §6, §10, §12 | `stage-change-confirmation` | D-002 | 구현 범위 > Must |
+| 기본 seed의 한글·영문 이름 다양성 | FR-05 수동 검증 보완 | §5.3 | `seed-data-variety` | TECH_SPEC §5.3 | 검색 수동 검증 |
+| §3 Undo | FR-09 | 운영 정책상 기각 | 없음 | D-002, TECH_SPEC §9 | 기각 범위 |
+| §3 1,000건 성능 | FR-10 | 활성 범위 제외 | 없음 | TECH_SPEC §9 | 제외 범위 |
+| §3 웹 접근성 | FR-11 | §10, §11 | `board-layout`, `card-list`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`; 결함 수정 시 `a11y-keyboard` | D-010 | 구현 범위 > Should |
 | §4 mock API 자체 구현·200~800ms·약 15% 실패 | 제품 가정 §6 | §4, §5 | `mock-api` | D-004 | mock API |
-| §2.2 유효하지 않은 이동 저장 금지 | FR-03 | §4, §5 | `mock-api` | D-008 | mock API |
-| 선택 기술: CSS Modules | 비기능 요구사항 §11 | §0 | `project-setup` | D-009 | 기술 구성 |
+| §2.2 유효하지 않은 이동 저장 금지 | FR-03 | §4, §5 | `mock-api` | TECH_SPEC §4 | mock API |
+| 선택 기술: CSS Modules | 비기능 요구사항 §11 | §0 | `project-setup` | TECH_SPEC §0 | 기술 구성 |
 | §5~7 기능별 커밋·기록·제출 | 제출·평가 목표 §3.2 | 완료 정의 §15 | 모든 기능, `submission-review` | 범위 우선순위 | 실행·검증·구현 범위 |
 
 ## 1. 기능·커밋 순서
@@ -69,7 +69,7 @@ chore(project-setup): React TypeScript 프로젝트와 품질 도구 초기화
 
 범위:
 
-- 연결 근거: D-001 기술 기반
+- 연결 근거: TECH_SPEC §0 기술 기반
 - Vite React TypeScript scaffold
 - 기본 불필요 예제 제거
 - Query provider
