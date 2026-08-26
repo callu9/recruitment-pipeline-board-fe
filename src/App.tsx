@@ -70,7 +70,7 @@ function ApplicantDetailDialog({ applicant, onClose }: { applicant: Applicant; o
 }
 
 function App() {
-  const { data: applicants = [], isError, refetch } = useApplicantsQuery()
+  const { data: applicants = [], isPending, isError, refetch } = useApplicantsQuery()
   const { move, moveError, pendingIds } = useMoveApplicantStage()
   const [nameQuery, setNameQuery] = useState('')
   const [role, setRole] = useState<ApplicantRole | 'ALL'>('ALL')
@@ -93,15 +93,15 @@ function App() {
     }
   }
 
+  function resetFilters() {
+    setNameQuery('')
+    setRole('ALL')
+  }
+
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
         <h1>채용 파이프라인 보드</h1>
-        {isError && (
-          <button type="button" onClick={() => void refetch()}>
-            다시 시도
-          </button>
-        )}
       </header>
       <form className={styles.toolbar} aria-label="지원자 필터" onSubmit={(event) => event.preventDefault()}>
         <label>
@@ -119,7 +119,7 @@ function App() {
             ))}
           </select>
         </label>
-        <button type="button" onClick={() => { setNameQuery(''); setRole('ALL') }}>
+        <button type="button" onClick={resetFilters}>
           필터 초기화
         </button>
       </form>
@@ -128,46 +128,66 @@ function App() {
         const applicant = applicants.find((current) => current.id === applicantId)
         return applicant ? <p key={applicant.id}>{applicant.name}님의 단계를 저장하는 중입니다.</p> : null
       })}
-      <div ref={boardViewportRef} className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
-        <div className={styles.board}>
-          {STAGES.map((stage, index) => (
-            /* StageColumn: 단계 제목, 현재 결과 수, 소속 지원자 카드 목록을 렌더링한다. */
-            <section key={stage.code} className={styles.column} aria-labelledby={`stage-${index}`}>
-              <div className={styles.columnHeader}>
-                <h2 id={`stage-${index}`}>{stage.label}</h2>
-                <span>{applicantsByStage[stage.code].length}명</span>
-              </div>
-              <div className={styles.cardList}>
-                {applicantsByStage[stage.code].map((applicant) => (
-                  /* ApplicantCard: 지원자의 목록 정보와 현재 단계를 표시한다. */
-                  <article key={applicant.id} className={styles.card}>
-                    <h3>{applicant.name}</h3>
-                    <p>{applicant.role}</p>
-                    <p>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
-                    <p>현재 단계: {stage.label}</p>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        const board = boardViewportRef.current
-                        if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
-                        detailTriggerRef.current = event.currentTarget
-                        setSelectedApplicantId(applicant.id)
-                      }}
-                    >
-                      {applicant.name} 상세 열기
-                    </button>
-                    <StageMoveForm
-                      applicant={applicant}
-                      isPending={pendingIds.has(applicant.id)}
-                      onMove={(targetStage) => move(applicant.id, targetStage)}
-                    />
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
+      {isPending ? (
+        <section className={styles.state} role="region" aria-label="지원자 정보 로딩" aria-busy="true">
+          <p>지원자 정보를 불러오는 중입니다.</p>
+        </section>
+      ) : isError ? (
+        <section className={styles.state} role="alert">
+          <p>지원자 정보를 불러오지 못했습니다.</p>
+          <button type="button" onClick={() => void refetch()}>다시 시도</button>
+        </section>
+      ) : applicants.length === 0 ? (
+        <section className={styles.state}>
+          <p>등록된 지원자가 없습니다.</p>
+        </section>
+      ) : filteredApplicants.length === 0 ? (
+        <section className={styles.state}>
+          <p>현재 검색 조건에 맞는 지원자가 없습니다.</p>
+          <button type="button" onClick={resetFilters}>필터 초기화</button>
+        </section>
+      ) : (
+        <div ref={boardViewportRef} className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
+          <div className={styles.board}>
+            {STAGES.map((stage, index) => (
+              /* StageColumn: 단계 제목, 현재 결과 수, 소속 지원자 카드 목록을 렌더링한다. */
+              <section key={stage.code} className={styles.column} aria-labelledby={`stage-${index}`}>
+                <div className={styles.columnHeader}>
+                  <h2 id={`stage-${index}`}>{stage.label}</h2>
+                  <span>{applicantsByStage[stage.code].length}명</span>
+                </div>
+                <div className={styles.cardList}>
+                  {applicantsByStage[stage.code].length === 0 ? <p className={styles.columnEmpty}>이 단계에는 지원자가 없습니다.</p> : applicantsByStage[stage.code].map((applicant) => (
+                    /* ApplicantCard: 지원자의 목록 정보와 현재 단계를 표시한다. */
+                    <article key={applicant.id} className={styles.card}>
+                      <h3>{applicant.name}</h3>
+                      <p>{applicant.role}</p>
+                      <p>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
+                      <p>현재 단계: {stage.label}</p>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          const board = boardViewportRef.current
+                          if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
+                          detailTriggerRef.current = event.currentTarget
+                          setSelectedApplicantId(applicant.id)
+                        }}
+                      >
+                        {applicant.name} 상세 열기
+                      </button>
+                      <StageMoveForm
+                        applicant={applicant}
+                        isPending={pendingIds.has(applicant.id)}
+                        onMove={(targetStage) => move(applicant.id, targetStage)}
+                      />
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       {selectedApplicant && <ApplicantDetailDialog applicant={selectedApplicant} onClose={closeDetail} />}
     </main>
   )

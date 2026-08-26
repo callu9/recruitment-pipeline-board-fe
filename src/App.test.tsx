@@ -91,7 +91,7 @@ test('restores the board scroll position after closing applicant details', async
 
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
 
-  const board = screen.getByRole('region', { name: '채용 단계 보드' })
+  const board = await screen.findByRole('region', { name: '채용 단계 보드' })
   board.scrollLeft = 120
   const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
   fireEvent.click(detailTrigger)
@@ -139,13 +139,15 @@ test('renders the project shell title', () => {
   expect(screen.getByRole('heading', { name: '채용 파이프라인 보드' })).toBeInTheDocument()
 })
 
-test('renders the five stage columns in their defined order', () => {
+test('renders the five stage columns in their defined order', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   const { container } = render(
     <QueryClientProvider client={new QueryClient()}>
       <App />
     </QueryClientProvider>,
   )
 
+  await within(container).findByRole('region', { name: '채용 단계 보드' })
   const stages = ['서류검토', '면접', '처우협의', '최종합격', '불합격']
   const columns = within(container)
     .getAllByRole('region')
@@ -158,10 +160,10 @@ test('renders the five stage columns in their defined order', () => {
 
   columns.forEach((column, index) => {
     expect(within(column).getByRole('heading', { name: stages[index] })).toBeInTheDocument()
-    expect(within(column).getByText('0명')).toBeInTheDocument()
+    expect(within(column).getByText(/\d+명/)).toBeInTheDocument()
   })
 
-  const boardViewport = within(container).getByRole('region', { name: '채용 단계 보드' })
+  const boardViewport = await within(container).findByRole('region', { name: '채용 단계 보드' })
   expect(boardViewport).toHaveClass(styles.boardViewport)
   expect(boardViewport.firstElementChild).toHaveClass(styles.board)
 })
@@ -202,7 +204,7 @@ test('renders fetched applicants once in their stages with matching counts', asy
   )
 
   await within(container).findByText('김민지')
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
 
   expect(within(documentReviewColumn).getByText('1명')).toBeInTheDocument()
@@ -244,7 +246,7 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
     </QueryClientProvider>,
   )
 
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
 
@@ -267,11 +269,11 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
     </QueryClientProvider>,
   )
 
-  const documentReviewColumn = within(firstRender.container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(firstRender.container).findByRole('region', { name: '서류검토' })
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '지원자 001 단계 이동' })
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  await within(within(firstRender.container).getByRole('region', { name: '면접' })).findByRole('heading', {
+  await within(await within(firstRender.container).findByRole('region', { name: '면접' })).findByRole('heading', {
     name: '지원자 001',
   })
 
@@ -282,7 +284,7 @@ test('keeps a successfully moved applicant after the app is rendered again', asy
     </QueryClientProvider>,
   )
 
-  await within(within(secondRender.container).getByRole('region', { name: '면접' })).findByRole('heading', {
+  await within(await within(secondRender.container).findByRole('region', { name: '면접' })).findByRole('heading', {
     name: '지원자 001',
   })
 })
@@ -307,7 +309,7 @@ test('moves an applicant to the target column before a delayed stage PATCH succe
     </QueryClientProvider>,
   )
 
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
@@ -350,7 +352,7 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
     </QueryClientProvider>,
   )
 
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
 
@@ -392,7 +394,7 @@ test('restores only the failed applicant when another applicant move succeeds', 
   const { container } = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>,
   )
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
+  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
   const aForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
   const bForm = within(documentReviewColumn).getByRole('form', { name: '이준호 단계 이동' })
@@ -515,4 +517,80 @@ test('filters stage cards and counts by name and role, then resets both filters'
   fireEvent.click(within(container).getByRole('button', { name: '필터 초기화' }))
 
   expect(await within(interviewColumn).findByText('Alex Park')).toBeInTheDocument()
+})
+
+test('shows an accessible loading board while the applicants query is pending', () => {
+  server.use(http.get('*/api/applicants', () => new Promise<Response>(() => undefined)))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const loadingBoard = screen.getByRole('region', { name: '지원자 정보 로딩' })
+  expect(loadingBoard).toHaveAttribute('aria-busy', 'true')
+  expect(within(loadingBoard).getByText('지원자 정보를 불러오는 중입니다.')).toBeInTheDocument()
+})
+
+test('shows a non-technical query error and restores the board after retry succeeds', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  let requests = 0
+  server.use(http.get('*/api/applicants', () => {
+    requests += 1
+    return requests === 1
+      ? HttpResponse.json({ code: 'INTERNAL_ERROR', message: 'database password leaked' }, { status: 503 })
+      : HttpResponse.json([applicant])
+  }))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const error = await screen.findByRole('alert')
+  expect(error).toHaveTextContent('지원자 정보를 불러오지 못했습니다.')
+  expect(error).not.toHaveTextContent('database password leaked')
+
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+
+  expect(await screen.findByRole('region', { name: '채용 단계 보드' })).toBeInTheDocument()
+  expect(screen.getByText('김민지')).toBeInTheDocument()
+  expect(requests).toBe(2)
+})
+
+test('shows a distinct empty state when the source applicants list is empty', async () => {
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  expect(await screen.findByText('등록된 지원자가 없습니다.')).toBeInTheDocument()
+  expect(screen.queryByText('현재 검색 조건에 맞는 지원자가 없습니다.')).not.toBeInTheDocument()
+})
+
+test('shows a filter empty state and resets the existing filters', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  await screen.findByText('김민지')
+  fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: '없는 이름' } })
+
+  const emptyState = await screen.findByText('현재 검색 조건에 맞는 지원자가 없습니다.')
+  fireEvent.click(within(emptyState.closest('section')!).getByRole('button', { name: '필터 초기화' }))
+  expect(await screen.findByText('김민지')).toBeInTheDocument()
+})
+
+test('shows a short empty state only in stages without filtered applicants', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const interviewColumn = await screen.findByRole('region', { name: '면접' })
+  expect(within(interviewColumn).getByText('이 단계에는 지원자가 없습니다.')).toBeInTheDocument()
+  expect(within(screen.getByRole('region', { name: '서류검토' })).queryByText('이 단계에는 지원자가 없습니다.')).not.toBeInTheDocument()
 })
