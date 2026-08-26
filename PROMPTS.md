@@ -2054,6 +2054,100 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 - 해시: 최종 동기화 대기
 
+## [docs(decision-a11y)] 단계 이동 라이브 상태 판단 기록
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-11
+- native live region으로 진행·성공·실패를 처리한 판단과 A 실패 뒤 B 성공 반례를 `DECISIONS.md`에 기록한다.
+- 실제 사용자 검증으로 이미 기록된 범위만 완료로 옮기고, 확인되지 않은 보조기술 동작은 미검증으로 남긴다.
+- 앱 코드, 테스트, README는 수정하지 않는다.
+
+### 프롬프트 1 — 접근성 판단 문서화
+
+```text
+AGENTS.md, docs/ASSIGNMENT.md, docs/PRD.md, docs/TECH\_SPEC.md,
+docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md,
+README.md, 현재 코드와 최근 git log를 읽어라.
+
+P0 fix(a11y-live-status)의 사용자 검증 결과가 기록돼 있다고 가정한다.
+이번 작업 scope는 docs(decision-a11y) 하나뿐이다.
+
+연결 요구사항은 FR-11이다.
+
+완료 기준:
+
+- DECISIONS.md에 이동 진행·성공·실패 상태를 native live region으로 처리한 판단을 기록한다.
+- 성공과 실패 메시지를 분리한 이유를 A 실패 뒤 B 성공 반례와 연결한다.
+- 새 toast 라이브러리, 전역 상태, 자동 닫힘 타이머를 기각한 이유를 기록한다.
+- Undo와 1,000건 가상화의 기존 미완료 판단은 바꾸지 않는다.
+- 실제 사용자 검증 범위만 완료로 기록하고, 미확인 범위는 미검증으로 남긴다.
+
+이번 작업에서 하지 않을 것:
+
+- 앱 코드, 테스트, README 수정
+- 검증되지 않은 수동 브라우저 결과 작성
+- PROMPTS.md 기록 또는 staging
+- 커밋
+
+편집 전에 다음을 출력해라.
+
+1. 재사용할 기존 D-002, D-005, D-006, D-007 판단
+2. 수정할 파일과 책임
+3. FR-11과 A 실패/B 성공 반례의 연결
+4. 기록하면 안 되는 검증 주장
+5. 검증 계획
+6. 범위 밖 제안과 제외 이유
+
+그 뒤 DECISIONS.md만 최소 수정해라.
+npm run lint, npm run test, npm run build, git diff --check를 실제 실행하고,
+unstaged diff 요약·실제 결과·사용자가 확인할 문서 항목을 보고한 뒤 기다려라.
+```
+
+### AI 출력 요지
+
+- D-002, D-005, D-006, D-007을 전제로 D-010을 추가했다.
+- 진행·성공은 `role="status"`, 실패는 rollback 사실을 포함한 `role="alert"`로 기록하고, 성공·실패 상태를 분리해 A 실패 뒤 B 성공에도 A alert가 남는 이유를 설명했다.
+- toast 라이브러리, 전역 상태, 자동 닫힘 타이머는 각각 새 의존성·상태 소유권·시간 상태를 더하므로 기각했다.
+
+### 리뷰 / 검증
+
+#### 1. 문서 정독
+
+- 채택: D-002의 키보드 가능한 명시적 이동, D-005·D-007의 카드별 병렬 이동과 엔티티 rollback을 D-010의 근거로 재사용했다.
+- 유지: D-006의 Undo와 1,000건 가상화 미완료 판단을 바꾸지 않았다.
+- 기각: 앱 코드, 테스트, README, toast 라이브러리, 전역 상태, 자동 닫힘 타이머.
+
+#### 2. 자동 검증
+
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 7개 파일, 59개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 수동 검증
+
+- 이 문서 scope에서는 브라우저 조작을 수행하지 않았다.
+- D-010의 완료 범위에는 기존 `fix(a11y-live-status)` 기록의 사용자 검증만 옮겼다. VoiceOver의 성공·실패 및 여러 카드 동시 pending 안내 순서는 미검증으로 남겼다.
+
+#### 4. 최종 판단
+
+- 사용자 확인: D-010의 완료·미검증 경계를 확인한 뒤 커밋·push를 요청했다.
+- 채택: 실제 확인 범위를 넓히지 않고 native live region 선택과 반례를 기록했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  docs(decision-a11y): 라이브 상태 알림 판단 기록
+
+  - FR-11 이동 상태를 native live region으로 처리한 이유를 기록
+  - A 실패 뒤 B 성공에도 실패 안내를 보존하는 상태 분리 근거를 명시
+  ```
+
+- 해시: 최종 동기화 대기
+
 ## 좋은 리뷰 예시
 
 ```md
