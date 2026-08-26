@@ -251,6 +251,7 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
   const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
 
   expect(within(moveForm).queryByRole('option', { name: '서류검토' })).not.toBeInTheDocument()
+  expect(within(moveForm).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual(['', 'INTERVIEW', 'REJECTED'])
 
   fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
   fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
@@ -259,6 +260,29 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
   expect(requestBody).toEqual({ stage: 'INTERVIEW' })
   expect(within(documentReviewColumn).queryByText('김민지')).not.toBeInTheDocument()
   expect(await screen.findByRole('status')).toHaveTextContent('김민지님을 면접(으)로 이동했습니다.')
+})
+
+test('shows terminal-stage status instead of a move form', async () => {
+  const applicants: Applicant[] = [
+    {
+      id: 'applicant-hired', name: '최종합격자', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+      stage: 'HIRED', email: 'hired@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+    },
+    {
+      id: 'applicant-rejected', name: '불합격자', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
+      stage: 'REJECTED', email: 'rejected@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
+    },
+  ]
+  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  for (const [columnName, applicantName] of [['최종합격', '최종합격자'], ['불합격', '불합격자']]) {
+    const column = await screen.findByRole('region', { name: columnName })
+    const card = within(column).getByRole('heading', { name: applicantName }).closest('article')!
+    expect(within(card).getByText('종료된 단계입니다.')).toBeInTheDocument()
+    expect(within(card).queryByRole('form')).not.toBeInTheDocument()
+  }
 })
 
 test('keeps a successfully moved applicant after the app is rendered again', async () => {

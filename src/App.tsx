@@ -3,11 +3,12 @@ import styles from './App.module.css'
 import { useApplicantsQuery } from './features/recruitment-board/api/useApplicantsQuery'
 import { useMoveApplicantStage } from './features/recruitment-board/api/useMoveApplicantStage'
 import { filterApplicants, getApplicantRoles, groupApplicantsByStage } from './features/recruitment-board/model/applicantSelectors'
-import { STAGES } from './features/recruitment-board/model/stages'
+import { getAllowedNextStages, STAGES } from './features/recruitment-board/model/stages'
 import type { Applicant, ApplicantRole, ApplicantStage } from './features/recruitment-board/model/applicant.types'
 
 function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage) => void }) {
   const [targetStage, setTargetStage] = useState<ApplicantStage | ''>('')
+  const allowedNextStages = getAllowedNextStages(applicant.stage)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -21,7 +22,7 @@ function StageMoveForm({ applicant, isPending, onMove }: { applicant: Applicant;
         이동할 단계
         <select disabled={isPending} value={targetStage} onChange={(event) => setTargetStage(event.target.value as ApplicantStage)}>
           <option value="">단계 선택</option>
-          {STAGES.filter((stage) => stage.code !== applicant.stage).map((stage) => (
+          {STAGES.filter(({ code }) => allowedNextStages.includes(code)).map((stage) => (
             <option key={stage.code} value={stage.code}>
               {stage.label}
             </option>
@@ -184,11 +185,13 @@ function App() {
                       >
                         {applicant.name} 상세 열기
                       </button>
-                      <StageMoveForm
-                        applicant={applicant}
-                        isPending={pendingIds.has(applicant.id)}
-                        onMove={(targetStage) => move(applicant.id, targetStage)}
-                      />
+                      {getAllowedNextStages(applicant.stage).length > 0 ? (
+                        <StageMoveForm
+                          applicant={applicant}
+                          isPending={pendingIds.has(applicant.id)}
+                          onMove={(targetStage) => move(applicant.id, targetStage)}
+                        />
+                      ) : <p>종료된 단계입니다.</p>}
                     </article>
                   ))}
                 </div>

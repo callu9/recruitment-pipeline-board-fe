@@ -148,7 +148,7 @@ export interface MoveApplicantStageRequest {
 }
 
 export interface ApiErrorBody {
-  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_BODY';
+  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_TRANSITION' | 'INVALID_BODY';
   message: string;
 }
 ```
@@ -166,6 +166,23 @@ export const STAGES = [
 ```
 
 단계 라벨·순서·필터는 문자열을 여러 파일에 중복 작성하지 않고 `STAGES`를 기준으로 생성한다.
+
+### 단계 전이 정책
+
+```ts
+export const ALLOWED_NEXT_STAGES: Readonly<Record<ApplicantStage, readonly ApplicantStage[]>> = {
+  DOCUMENT_REVIEW: ['INTERVIEW', 'REJECTED'],
+  INTERVIEW: ['OFFER', 'REJECTED'],
+  OFFER: ['HIRED', 'REJECTED'],
+  HIRED: [],
+  REJECTED: [],
+};
+
+export function getAllowedNextStages(currentStage: ApplicantStage): readonly ApplicantStage[];
+export function canTransitionTo(currentStage: ApplicantStage, targetStage: ApplicantStage): boolean;
+```
+
+UI는 `getAllowedNextStages`로 선택지를 만들고 빈 배열이면 종료 상태 문구를 표시한다. MSW handler도 동일한 `canTransitionTo`를 사용해 API 직접 호출을 검증하므로 전이표를 중복 작성하지 않는다.
 
 ## 4. API 계약
 
@@ -234,12 +251,14 @@ Content-Type: application/json
 
 - 존재하지 않는 ID: `404 NOT_FOUND`
 - 유효하지 않은 단계: `400 INVALID_STAGE`
+- 유효하지만 현재 단계에서 허용되지 않은 전이: `409 INVALID_TRANSITION`
 - 잘못된 JSON body: `400 INVALID_BODY`
 - 랜덤 실패: `503 MOCK_FAILURE`
 
 중요:
 
 - 랜덤 실패 여부는 저장 전에 판정한다.
+- handler는 ID와 stage를 검증한 뒤 동일 전이 정책으로 현재 stage를 확인한다. 허용되지 않은 전이는 저장하지 않는다.
 - 성공 시 `stage`만 갱신한다.
 - handler는 지연과 실패 판정을 마친 뒤 `updateApplicantStage`를 호출한다. 이 함수는 최신 `localStorage` 값을 읽고 대상 한 건만 바꾼 뒤, 중간 `await` 없이 즉시 저장한다.
 
@@ -498,7 +517,7 @@ export function groupApplicantsByStage(
 
 ### `StageMoveForm`
 
-- 현재 단계를 제외한 옵션만 제공
+- 현재 단계에서 허용된 다음 단계만 옵션으로 제공
 - 선택되지 않았거나 현재 단계이면 submit 불가
 - pending이면 select와 button 비활성화
 - 이벤트가 카드 상세 열기로 전파되지 않도록 구조적으로 분리

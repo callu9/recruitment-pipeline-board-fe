@@ -3,7 +3,7 @@
 ## 0. 운영 원칙
 
 - 한 기능을 구현하고 검증하고 기록하고 커밋한 뒤 다음 기능으로 넘어간다.
-- Undo와 가상화는 6~10시간 활성 구현 계획에서 제외하고 후속 후보로만 남긴다.
+- Undo는 알림 연동 운영 위험으로 기각하고, 가상화만 후속 후보로 남긴다.
 - 각 커밋에서 코드와 해당 기능의 `PROMPTS.md` 섹션을 함께 포함한다.
 - 커밋 전 `git diff`, 관련 테스트, 전체 lint/test/build를 확인한다.
 - 커밋 후 squash, amend 남용, force-push를 하지 않는다.
@@ -21,7 +21,8 @@
 | §2.5 상세 보기 | FR-06 | §10 | `detail-panel` | D-002 | 구현 범위 > Must |
 | §2.6 로딩·오류·빈 상태 | FR-07 | §7, §11 | `ui-states` | D-006 | 구현 범위 > Must |
 | §3 경쟁 상태 | FR-08 | §8 | `optimistic-update` | D-005, D-007 | 구현 범위 > Should |
-| §3 Undo | FR-09 | 활성 범위 제외 | 없음 | D-006 | 제외 범위 |
+| 단방향 단계 전이 정책 | FR-03 | §3, §4, §8 | `stage-transition-policy` | D-011 | 구현 범위 > Must |
+| §3 Undo | FR-09 | 운영 정책상 기각 | 없음 | D-011 | 기각 범위 |
 | §3 1,000건 성능 | FR-10 | 활성 범위 제외 | 없음 | D-006 | 제외 범위 |
 | §3 웹 접근성 | FR-11 | §10, §11 | `board-layout`, `card-list`, `optimistic-update`, `search-filter`, `detail-panel`, `ui-states`; 결함 수정 시 `a11y-keyboard` | D-002 | 구현 범위 > Should |
 | §4 mock API 자체 구현·200~800ms·약 15% 실패 | 제품 가정 §6 | §4, §5 | `mock-api` | D-004 | mock API |
@@ -189,14 +190,14 @@ feat(stage-move): 명시적 단계 변경 액션과 mock API 저장 구현
 
 - 연결 요구사항: FR-03
 - 단계 선택 + 이동 버튼
-- 현재 단계 제외 옵션
+- 현재 단계에서 허용된 다음 단계 옵션
 - PATCH API 연결
 - 이 커밋에서는 API 성공 뒤 화면 반영이어도 됨
 - 성공/실패 기본 피드백
 
 검증:
 
-- 모든 다른 단계로 이동 가능
+- 허용된 다음 단계로만 이동 가능
 - 성공 뒤 새로고침 유지
 - 현재 단계 제출 불가
 - 실패 시 저장소 불변
@@ -319,7 +320,33 @@ AI 기록:
 
 - `[ui-states]`
 
-### Commit 11 — 키보드·접근성 감사 — 수정이 있을 때만
+### Commit 11 — 단계 전이 정책
+
+```text
+feat(stage-transition-policy): 단방향 단계 전이 정책 적용
+```
+
+범위:
+
+- 연결 요구사항: FR-03; FR-04, FR-08 회귀 보호
+- `stages.ts`의 단일 순수 전이 정책
+- UI는 현재 단계의 허용된 선택지만 표시하고, 종료 상태에는 이동 form 대신 상태 문구를 표시
+- MSW PATCH handler는 같은 정책으로 직접 API 호출도 검증하고 `409 INVALID_TRANSITION`을 반환
+- 기존 낙관적 업데이트, 엔티티 단위 rollback, 동일 ID pending guard, 다른 ID 병렬 이동은 유지
+
+검증:
+
+- 각 활성 단계의 허용된 다음 단계 목록
+- 단계 건너뛰기·이전 단계·종료 상태 전이가 409이며 localStorage를 변경하지 않음
+- 유효하지 않은 stage는 기존 `400 INVALID_STAGE` 유지
+- 허용된 전이의 즉시 UI 반영·실패 rollback·새로고침 영속성
+- 동일 카드 pending guard와 다른 카드 병렬 이동 회귀
+
+AI 기록:
+
+- `[stage-transition-policy]`
+
+### Commit 12 — 키보드·접근성 감사 — 수정이 있을 때만
 
 ```text
 fix(a11y-keyboard): 키보드 이동과 동적 상태 안내 보완
@@ -345,7 +372,7 @@ AI 기록:
 
 여기까지를 Must + 핵심 가점 완료선으로 본다.
 
-### Commit 12 — 제출 문서 정리
+### Commit 13 — 제출 문서 정리
 
 ```text
 docs(submission-review): 실행·검증 방법과 설계 결정 최종 정리

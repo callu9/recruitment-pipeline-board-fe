@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { STAGES } from '../features/recruitment-board/model/stages'
+import { canTransitionTo, STAGES } from '../features/recruitment-board/model/stages'
 import type { ApiErrorBody, MoveApplicantStageRequest } from '../features/recruitment-board/model/applicant.types'
 import { getApplicantSnapshot, loadApplicants, updateApplicantStage } from './mockDb'
 import { shouldMockApiFail, waitForMockDelay } from './mockConfig'
@@ -36,8 +36,12 @@ export const handlers = [
 
     if (!isMoveRequest(body)) return error(400, 'INVALID_BODY', '요청 본문이 올바른 JSON 객체가 아닙니다.')
     if (!isStage(body.stage)) return error(400, 'INVALID_STAGE', '유효하지 않은 채용 단계입니다.')
-    if (!getApplicantSnapshot().some(({ id }) => id === params.applicantId)) {
+    const applicant = getApplicantSnapshot().find(({ id }) => id === params.applicantId)
+    if (!applicant) {
       return error(404, 'NOT_FOUND', '지원자를 찾을 수 없습니다.')
+    }
+    if (!canTransitionTo(applicant.stage, body.stage)) {
+      return error(409, 'INVALID_TRANSITION', '현재 단계에서는 선택한 단계로 이동할 수 없습니다.')
     }
 
     if (shouldMockApiFail()) return error(503, 'MOCK_FAILURE', '지원자 단계를 저장하지 못했습니다.')

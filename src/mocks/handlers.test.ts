@@ -45,12 +45,12 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'HIRED' }),
+      body: JSON.stringify({ stage: 'INTERVIEW' }),
     })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ id: 'applicant-001', stage: 'HIRED' })
-    expect(loadApplicants().find(({ id }) => id === 'applicant-001')).toMatchObject({ stage: 'HIRED' })
+    await expect(response.json()).resolves.toMatchObject({ id: 'applicant-001', stage: 'INTERVIEW' })
+    expect(loadApplicants().find(({ id }) => id === 'applicant-001')).toMatchObject({ stage: 'INTERVIEW' })
   })
 
   test('does not change storage when PATCH failure is forced', async () => {
@@ -62,7 +62,7 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'HIRED' }),
+      body: JSON.stringify({ stage: 'INTERVIEW' }),
     })
 
     expect(response.status).toBe(503)
@@ -75,7 +75,7 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'HIRED' }),
+      body: JSON.stringify({ stage: 'INTERVIEW' }),
     })
 
     expect(response.status).toBe(503)
@@ -122,6 +122,31 @@ describe('mock applicants API', () => {
     expect(localStorage.getItem('recruitment-pipeline-board:applicants:v1')).toBe(before)
   })
 
+  test.each([
+    ['DOCUMENT_REVIEW', 'OFFER'],
+    ['INTERVIEW', 'DOCUMENT_REVIEW'],
+    ['HIRED', 'REJECTED'],
+    ['REJECTED', 'INTERVIEW'],
+  ] as const)('rejects the forbidden %s → %s transition without changing storage', async (currentStage, targetStage) => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+    const applicants = loadApplicants()
+    localStorage.setItem(
+      'recruitment-pipeline-board:applicants:v1',
+      JSON.stringify([{ ...applicants[0], stage: currentStage }]),
+    )
+    const before = localStorage.getItem('recruitment-pipeline-board:applicants:v1')
+
+    const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: targetStage }),
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ code: 'INVALID_TRANSITION' })
+    expect(localStorage.getItem('recruitment-pipeline-board:applicants:v1')).toBe(before)
+  })
+
   test('uses the documented delay range and default failure rate', () => {
     expect(getMockDelay(() => 0)).toBe(MIN_DELAY_MS)
     expect(getMockDelay(() => 0.999999)).toBe(MAX_DELAY_MS)
@@ -135,7 +160,7 @@ describe('mock applicants API', () => {
       fetch(`${applicantsUrl}/applicant-001/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: 'HIRED' }),
+        body: JSON.stringify({ stage: 'INTERVIEW' }),
       }),
       fetch(`${applicantsUrl}/applicant-002/stage`, {
         method: 'PATCH',
@@ -149,7 +174,7 @@ describe('mock applicants API', () => {
 
     expect(applicants).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'applicant-001', stage: 'HIRED' }),
+        expect.objectContaining({ id: 'applicant-001', stage: 'INTERVIEW' }),
         expect.objectContaining({ id: 'applicant-002', stage: 'REJECTED' }),
       ]),
     )

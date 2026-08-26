@@ -34,6 +34,6 @@ export interface MoveApplicantStageRequest {
 }
 
 export interface ApiErrorBody {
-  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_BODY'
+  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_TRANSITION' | 'INVALID_BODY'
   message: string
 }

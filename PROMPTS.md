@@ -2148,6 +2148,216 @@ unstaged diff 요약·실제 결과·사용자가 확인할 문서 항목을 보
 
 - 해시: 최종 동기화 대기
 
+## [stage-transition-policy] 단방향 단계 전이 정책
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-03; FR-04와 FR-08 회귀 보호
+- 일반 채용담당자 UI와 mock API가 하나의 순수 전이 정책을 사용한다.
+- 유효하지 않은 stage는 기존 `400 INVALID_STAGE`를 유지하고, 현재 단계에서 허용되지 않은 유효 stage는 저장 없이 `409 INVALID_TRANSITION`으로 거부한다.
+- `HIRED`와 `REJECTED`는 이동 form 없이 종료 상태 문구를 표시한다.
+
+### 프롬프트 1 — 단방향 전이 정책 구현
+
+```text
+AGENTS.md와 다음 문서를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 stage-transition-policy 섹션
+6. 관련 최근 커밋과 현재 코드
+
+이번 작업 scope는 stage-transition-policy 하나뿐이다.
+연결 요구사항은 FR-03이며, FR-04와 FR-08의 기존 동작이 깨지지 않아야 한다.
+
+변경 배경:
+현재 문서와 UI는 현재 단계를 제외한 모든 단계로 이동할 수 있게 한다.
+향후 단계 변경이 지원자 알림과 연결될 수 있다는 운영 가정에서는
+이전 단계 복귀나 임의 단계 건너뛰기가 외부 상태와 불일치를 만들 수 있다.
+따라서 일반 채용담당자 UI에서는 단방향 상태 전이만 허용한다.
+
+확정할 전이 정책:
+
+- DOCUMENT\_REVIEW → INTERVIEW 또는 REJECTED
+- INTERVIEW → OFFER 또는 REJECTED
+- OFFER → HIRED 또는 REJECTED
+- HIRED → 이동 불가
+- REJECTED → 이동 불가
+
+완료 기준:
+
+- 전이 규칙을 기존 stages 모델에 순수 데이터 또는 순수 함수로 정의한다.
+- UI의 단계 선택지는 현재 단계에서 허용된 다음 단계만 표시한다.
+- HIRED와 REJECTED 카드에는 이동 form을 렌더링하지 않고
+  “종료된 단계입니다.”라는 상태를 표시한다.
+- mock API도 같은 전이 정책을 사용한다.
+- 유효한 stage지만 현재 상태에서 허용되지 않는 이동은
+  409 INVALID\_TRANSITION으로 거부한다.
+- 금지된 이동은 localStorage를 변경하지 않는다.
+- API 직접 호출로 UI 검증을 우회해도 금지된 이동이 저장되지 않는다.
+- 기존 낙관적 업데이트, 엔티티 단위 rollback, pending guard,
+  서로 다른 지원자의 병렬 이동은 유지한다.
+- UI와 API에 전이표를 중복해서 작성하지 않는다.
+- 순수 전이 정책과 API 거부 동작을 테스트한다.
+
+문서 반영:
+
+- docs/PRD.md
+  - “현재 단계를 제외한 모든 단계” 가정을 새 전이 정책으로 교체
+  - FR-03 수용 기준 갱신
+  - FR-09 Undo는 삭제하지 않고, 알림 연동 운영 위험 때문에 채택하지 않은 Should로 기록
+- docs/TECH\_SPEC.md
+  - 전이 정책 함수와 409 INVALID\_TRANSITION 계약 추가
+  - UI와 handler가 같은 정책을 사용하도록 명시
+- docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+  - stage-transition-policy scope와 검증 항목 추가
+  - Undo 상태를 “활성 범위 제외”에서 “운영 정책상 기각”으로 명확히 변경
+- DECISIONS.md
+  - 단방향 전이, 종료 상태, Undo 기각 이유를 새 결정으로 기록
+- README.md
+  - 현재 단계 이동 규칙과 Undo 미지원 이유를 사용자 관점에서 반영
+- docs/ASSIGNMENT.md는 원문이므로 수정하지 않는다.
+
+이번 작업에서 하지 않을 것:
+
+- 단계 변경 확인 dialog
+- 실제 지원자 알림 발송
+- 감사 로그나 관리자 전용 상태 정정
+- seed 데이터 변경
+- 리디자인과 반응형 개선
+- Undo 구현
+- 관련 없는 리팩터링
+- 커밋
+- 사용자 검증 전 PROMPTS.md 수정이나 staging
+
+편집 전에 먼저 다음을 출력해라.
+
+1. 요구사항 ID
+2. 현재 코드에서 재사용할 부분
+3. 생성·수정할 파일과 책임
+4. 전이 정책 데이터 구조와 알고리즘
+5. UI → mutation → mock API → localStorage 데이터 흐름
+6. 유효·금지·종료 상태 검증 시나리오
+7. 먼저 실패시킬 테스트
+8. 범위를 넘는 제안과 제외 이유
+
+테스트를 먼저 작성해 현재 동작에서 실패하는지 확인한 뒤 최소 구현해라.
+
+필수 자동 검증:
+
+- 각 활성 단계의 허용된 다음 단계 목록
+- DOCUMENT\_REVIEW → OFFER 같은 단계 건너뛰기 차단
+- INTERVIEW → DOCUMENT\_REVIEW 같은 이전 단계 이동 차단
+- HIRED와 REJECTED에서 모든 이동 차단
+- 유효하지 않은 stage는 기존 INVALID\_STAGE 유지
+- 금지된 전이는 409 INVALID\_TRANSITION
+- 금지된 전이 뒤 localStorage 불변
+- 허용된 전이 성공과 새로고침 영속성
+- 허용된 전이의 낙관적 업데이트와 실패 rollback
+- 기존 동일 카드 pending guard와 다른 카드 병렬 이동
+- npm run lint
+- npm run test
+- npm run build
+
+자동 검증 후 unstaged diff, 변경 파일, 실제 명령 결과,
+수동 검증 시나리오, 수용 기준 충족 여부와 알려진 한계를 보고하고 기다려라.
+사용자 검증 결과가 오기 전에는 prompt-record, staging, commit을 진행하지 마라.
+```
+
+### 프롬프트 2 — 사용자 검증 후 읽기 전용 리뷰
+
+```text
+수동확인 시나리오 모두 확인함.
+
+현재 브랜치의 stage-transition-policy 미커밋 diff를 읽기 전용으로 리뷰. 파일은 수정하지 마라.
+
+연결 요구사항은 FR-03이며 FR-04, FR-08 회귀도 확인한다.
+
+확정 전이:
+
+- DOCUMENT\_REVIEW → INTERVIEW | REJECTED
+- INTERVIEW → OFFER | REJECTED
+- OFFER → HIRED | REJECTED
+- HIRED → 없음
+- REJECTED → 없음
+
+우선순위:
+
+1. UI와 mock API가 동일한 순수 전이 정책을 사용하는가
+2. UI만 제한하고 직접 PATCH 요청은 허용하는 우회 경로가 없는가
+3. 이전 단계 이동과 단계 건너뛰기가 모두 차단되는가
+4. 모든 활성 단계에서 REJECTED 전이가 가능한가
+5. HIRED와 REJECTED가 실제 종료 상태인가
+6. INVALID\_STAGE와 INVALID\_TRANSITION이 정확히 구분되는가
+7. 409 응답 전에 localStorage가 변경되지 않는가
+8. 허용된 이동의 낙관적 업데이트·rollback·pending guard가 유지되는가
+9. 문서와 실제 코드의 전이표가 일치하는가
+10. Undo가 원본 과제에서 삭제되지 않고 기각 판단으로 기록됐는가
+11. 확인 dialog나 알림 발송 등 다음 scope가 섞이지 않았는가
+12. 전이표 중복, 새 의존성, 불필요한 추상화가 없는가
+
+각 지적은 다음 형식으로 작성해라.
+
+- 심각도: blocker / major / minor
+- 파일과 코드 위치
+- 재현 시나리오
+- 문제 원인
+- 최소 수정안
+
+추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라.
+문제가 없다면 확인한 범위와 미검증 범위를 분리해서 보고해라.
+```
+
+### AI 출력 요지
+
+- 기존 `stages` 모델에 단일 전이표와 순수 조회·판정 함수를 추가하고, UI select와 MSW PATCH handler가 이를 함께 사용하도록 제안·구현했다.
+- 종료 상태에는 form 대신 상태 문구를 표시하고, handler는 저장 함수 호출 전 `409 INVALID_TRANSITION`을 반환하도록 했다.
+- 기존 TanStack Query 낙관적 갱신, 대상 엔티티 rollback, 동기 pending guard, 서로 다른 카드 병렬 이동은 변경하지 않았다.
+- 문서의 FR-03·API 계약·Undo 기각 판단을 같은 정책으로 갱신하고, 사용자 검증 뒤 읽기 전용 리뷰에서 지적 사항이 없다고 확인했다.
+
+### 리뷰 / 검증
+
+#### 1. 테스트 우선과 구현 검토
+
+- RED: 순수 정책 함수 부재, 금지 PATCH의 200 저장, 서류검토 UI에 허용되지 않은 옵션 노출 때문에 focused 테스트 11개가 실패했다.
+- 채택: `ALLOWED_NEXT_STAGES`와 `getAllowedNextStages`/`canTransitionTo`를 `stages.ts`에 두고, UI와 handler가 이 정책을 직접 소비하게 했다.
+- 기각: UI와 API에 별도 전이표를 쓰는 방식, 새 상태 저장소·의존성, 확인 dialog·알림 발송·Undo 구현은 범위 밖이므로 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- focused: `npm run test -- src/features/recruitment-board/model/stages.test.ts src/mocks/handlers.test.ts src/App.test.tsx` — 3개 파일, 46개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 70개 테스트 통과. 사용자 검증 후 읽기 전용 리뷰에서도 8개 파일, 70개 테스트 통과를 재확인했다.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 수동 검증과 리뷰
+
+- 사용자 확인: 보고한 수동확인 시나리오 모두 확인했다고 응답했다.
+- 읽기 전용 리뷰: 단일 정책 공유, 직접 PATCH 차단, 이전·건너뛰기·종료 상태 차단, 오류 코드 구분, 저장 전 409, FR-04·FR-08 회귀, 문서 일치, Undo 기각, 범위 밖 기능·중복·새 의존성 부재를 점검했고 지적 사항은 없었다.
+- 직접 브라우저 조작은 이 세션에서 수행하지 않았다.
+
+#### 4. 최종 판단
+
+- 채택: 허용 전이는 낙관적으로 반영되고 성공 응답을 병합하며, 실패 시 이전 applicant 한 건만 복원하는 기존 흐름을 유지했다.
+- 제한: 상태 정정·감사 로그·관리자 전용 전이와 실제 알림 발송은 구현하지 않았다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(stage-transition-policy): 채용 단계의 단방향 전이 강제
+
+  - UI와 mock API가 공유하는 순수 전이 정책 추가
+  - 금지 전이를 409 INVALID_TRANSITION으로 저장 전 차단
+  - 종료 상태 UI와 전이·회귀 테스트 및 문서 갱신
+  ```
+
+- 해시: 최종 동기화 대기
+
 ## 좋은 리뷰 예시
 
 ```md
