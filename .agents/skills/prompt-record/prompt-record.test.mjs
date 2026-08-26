@@ -12,7 +12,6 @@ const scriptPath = join(
   'read-prompt-log.mjs',
 )
 const skillPath = join(dirname(fileURLToPath(import.meta.url)), 'SKILL.md')
-const promptsPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'PROMPTS.md')
 const agentsPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'AGENTS.md')
 const commitPlanPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -77,9 +76,8 @@ test('fails instead of selecting another log when the requested file is missing'
 })
 
 test('records the current feature automatically and defers hash sync to submission review', async () => {
-  const [skill, prompts, agents, commitPlan] = await Promise.all([
+  const [skill, agents, commitPlan] = await Promise.all([
     readFile(skillPath, 'utf8'),
-    readFile(promptsPath, 'utf8'),
     readFile(agentsPath, 'utf8'),
     readFile(commitPlanPath, 'utf8'),
   ])
@@ -88,10 +86,29 @@ test('records the current feature automatically and defers hash sync to submissi
   assert.match(skill, /Final hash sync mode/)
   assert.doesNotMatch(skill, /immediately previous feature section/)
   assert.match(skill, /planned commit subject/)
-  assert.match(agents, /without a separate user request/)
+  assert.match(agents, /without a separate request/)
   assert.match(commitPlan, /submission-review.*한 번에 동기화/s)
-  assert.match(prompts, /- 예정 메시지:/)
-  assert.match(prompts, /- 무엇:/)
-  assert.match(prompts, /- 왜:/)
-  assert.match(prompts, /- 해시: 최종 동기화 대기/)
+})
+
+test('finalizes the prompt record after user validation and before staging', async () => {
+  const [skill, agents, commitPlan] = await Promise.all([
+    readFile(skillPath, 'utf8'),
+    readFile(agentsPath, 'utf8'),
+    readFile(commitPlanPath, 'utf8'),
+  ])
+
+  assert.doesNotMatch(skill, /before the completion report/)
+  assert.match(skill, /user reports validation results or explicitly accepts the unverified scope/)
+  assert.match(skill, /before staging/)
+  assert.match(agents, /report the unstaged diff and manual validation scenarios/)
+
+  const automatedVerification = commitPlan.indexOf('자동 검증 결과와 unstaged diff')
+  const userValidation = commitPlan.indexOf('사용자 검증 결과')
+  const promptRecord = commitPlan.indexOf('`prompt-record`로')
+  const staging = commitPlan.indexOf('관련 파일만 stage한다')
+
+  assert.ok(automatedVerification >= 0)
+  assert.ok(automatedVerification < userValidation)
+  assert.ok(userValidation < promptRecord)
+  assert.ok(promptRecord < staging)
 })
