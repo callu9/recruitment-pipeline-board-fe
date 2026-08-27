@@ -3219,7 +3219,7 @@ main
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(design-foundation): 채용 보드의 시각 토큰과 기본 컨트롤 정리
@@ -3229,7 +3229,7 @@ main
   - 기존 semantic HTML과 focus·pending 계약 및 보드 내부 스크롤 유지
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `36aedb8`
 
 ## [stage-visual-language] 채용 단계별 시각 언어 적용
 
@@ -3398,7 +3398,7 @@ esc 닫기 안 됨. 또한 보드 영역 가로폭이 너무 좁은 것 같아 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(stage-visual-language): 채용 단계별 시각 언어 적용
@@ -3408,7 +3408,7 @@ esc 닫기 안 됨. 또한 보드 영역 가로폭이 너무 좁은 것 같아 �
   - 상세 Escape 종료·focus 복귀와 반응형 보드 가로 스크롤 계약 보호
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `07ce188`
 
 ## [board-density] 보드 정보 위계와 카드 밀도 개선
 
@@ -3551,17 +3551,19 @@ AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(board-density): 보드 정보 위계와 카드 밀도 개선
 
   - 검색·직무 필터와 전체·필터 결과 count의 toolbar 위계 정리
+
   - 카드 정보를 이름·단계·직무·지원일·독립 action 순서로 재배치
+
   - 기존 단계 시각 언어와 보드 내부 스크롤·상호작용 계약 회귀 보호
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `c615bfd`
 
 ## [detail-feedback-redesign] 상세 패널과 상태 피드백 위계 개선
 
@@ -3725,7 +3727,7 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(detail-feedback-redesign): 상세 패널과 상태 피드백 위계 개선
@@ -3735,4 +3737,4 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
   - native dialog focus·scroll 복귀와 live region·rollback 상태 소유권 보호
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `36c9bcf`
