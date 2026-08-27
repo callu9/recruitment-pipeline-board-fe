@@ -3562,3 +3562,177 @@ AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
   ```
 
 - 해시: 최종 동기화 대기
+
+## [detail-feedback-redesign] 상세 패널과 상태 피드백 위계 개선
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-06, FR-07, FR-11.
+- native dialog 기반 우측 상세 패널을 핵심 지원자 정보, 연락처, 경력·기술, 메모로 구분한다.
+- loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태를 문구와 시각 표현으로 구분한다.
+- 단계 이동 pending·success는 `role="status"`, failure는 `role="alert"`를 유지하면서 시각적으로 구분한다.
+- 상세 dialog의 Esc·닫기, trigger focus 복귀, 검색·필터·보드 scroll 맥락을 유지한다.
+- failure의 rollback 안내와 success·failure의 분리된 상태 소유권을 유지한다.
+- 새 library, 범용 상태 abstraction, query·mutation·rollback·pending guard·전이 정책 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. 앞선 세 redesign commit과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 detail-feedback-redesign 하나뿐이며 branch는 feat/detail-feedback-redesign이어야 한다.
+
+연결 요구사항은 FR-06, FR-07, FR-11이다.
+
+완료 기준:
+
+- native dialog 기반 우측 상세 패널의 제목, 핵심 지원자 정보, 연락처, 경력·기술·메모 위계를 개선한다.
+- loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태를 시각적으로 명확히 구분한다.
+- 단계 이동 pending, success, failure 메시지를 기존 role="status"와 role="alert" 계약을 유지하면서 구분한다.
+- 상세 dialog의 Esc·닫기와 trigger focus 복귀, 검색·필터·보드 scroll 맥락을 유지한다.
+- 기존 design tokens, stage visual language, board density 스타일을 재사용한다.
+- 실패 메시지는 rollback 사실을 계속 전달하며 다른 지원자의 성공 메시지가 실패를 즉시 덮지 않는 기존 상태 소유권을 유지한다.
+
+최소 구현 원칙:
+
+- native dialog와 현재 local state를 유지한다.
+- 필요한 semantic grouping과 CSS class만 추가하고 modal, focus-trap, toast, icon library를 추가하지 않는다.
+- 상태별 새 컴포넌트 계층이나 범용 Alert/Panel abstraction을 만들지 않는다.
+- query, mutation, entity rollback, pending guard, 전이 정책을 수정하지 않는다.
+- StageChangeConfirmationDialog의 동작과 디자인은 이번 scope에서 변경하지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: 상세 정보와 상태·feedback 표현을 위한 최소 semantic grouping과 CSS class 연결
+- src/App.module.css: 상세 panel 정보 위계, loading/error/empty, pending/success/failure 스타일
+- src/App.test.tsx: role, 상태 문구, dialog focus·scroll 맥락의 필요한 회귀 보호
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- StageChangeConfirmationDialog 재설계
+- 단계 이동 로직, rollback, pending guard 변경
+- toolbar·카드·단계 색상 체계 재설계
+- toast, modal/focus-trap library, 전역 상태
+- skeleton library 또는 범용 상태 컴포넌트
+- 새 제품 기능, Undo, 관리자 상태 정정
+- 관련 없는 refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 native dialog, role, focus·scroll 복귀 계약을 재사용하는 방식
+5. 상세 정보와 네 종류 query 상태 및 세 종류 move feedback의 최소 시각 구조
+6. 자동 검증 시나리오
+7. 키보드·강제 성공·강제 실패를 포함한 수동 브라우저 검증 시나리오
+8. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 구현 및 자동 검증 승인
+
+````text
+detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)을 확인했고, 승인한다.
+
+보고한 파일과 최소 방식으로 이 scope만 구현해라. role, dialog focus, 상태 분기처럼 동작 계약이 있는 변경은 관련 테스트를 먼저 현재 상태에서 실패시키고 최소 수정해라.
+
+구현 후 실제로 다음을 실행해라.
+
+- 관련 focused test
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+그다음 unstaged diff, 변경 파일, 충족한 수용 기준, 실제 명령 결과, 수동 브라우저 검증 시나리오, 알려진 제한, 기각하거나 다시 작성한 AI 제안과 이유를 보고하고 기다려라.
+
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는 PROMPTS.md 기록, staging, commit을 진행하지 마라.
+````
+
+### 프롬프트 3 — 수동 검증 완료 및 읽기 전용 diff 리뷰
+
+````text
+수동 브라우저 검증 완료.&#x20;
+
+현재 feat/detail-feedback-redesign 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-06, FR-07, FR-11이며 scope는 detail-feedback-redesign 하나다.
+
+우선순위:
+
+1. 우측 상세 panel의 정보 위계가 개선되면서 모든 기존 상세 필드가 유지되는가
+2. native dialog, aria-labelledby, Esc·닫기, trigger focus 복귀가 유지되는가
+3. 상세 열고 닫기 뒤 검색·필터·보드 scroll 맥락이 유지되는가
+4. loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태가 문구와 시각 표현 모두 구분되는가
+5. pending·success는 role="status", failure는 role="alert" 계약을 유지하는가
+6. failure가 rollback 사실을 전달하고 다른 성공 메시지에 즉시 지워지지 않는가
+7. 확인 dialog나 이동 상태 로직이 scope 밖에서 변경되지 않았는가
+8. toast, modal library, global state, 범용 상태 abstraction이 추가되지 않았는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- `bed5bdb`의 clean `ui-redesign`에서 `feat/detail-feedback-redesign` branch를 생성하고 구현 범위를 `src/App.tsx`, `src/App.module.css`, `src/App.test.tsx`로 제한했다.
+- 상세 dialog에 기존 stage code를 연결하고 정보를 핵심 지원자 정보, 연락처, 경력·기술, 메모의 명명된 영역으로 재구성했다.
+- 네 query 상태와 단계 이동 pending·success·failure에 기존 단계 시각 언어를 재사용한 CSS variant를 적용했다.
+- native dialog의 Esc·닫기·focus 복귀, 검색·필터·보드 scroll 복원과 분리된 success·failure 상태 소유권은 유지하고, 확인 dialog와 이동 로직은 변경하지 않았다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 상세 정보의 semantic grouping, query 상태 heading·region, feedback class 연결만 변경했다.
+- `src/App.module.css`는 기존 화면 token과 단계 색상값을 재사용해 상세 panel, 네 query 상태, 세 feedback 상태를 구분하고 30rem 이하 상세 목록을 한 열로 바꿨다.
+- `src/App.test.tsx`는 상세 필드·영역, 상태별 role·문구·class, pending·success·failure와 failure 뒤 success 공존 계약을 보호했다.
+- `src/index.css`, `StageChangeConfirmationDialog`, query·mutation hook, rollback, pending guard, 전이 정책, dependency는 변경하지 않았다.
+- 범용 Alert/Panel 컴포넌트, toast·modal·focus-trap·icon·skeleton library, 전역 상태와 새 전역 token은 필요하지 않아 추가하지 않았다.
+
+#### 2. 테스트 우선 구현 및 자동 검증
+
+- TDD RED에서 상세 `data-stage`·명명된 영역, feedback variant class, query 상태 heading·region 부재로 신규 assertion이 실패하는 것을 확인했다. 같은 실행에서 기존 영속성 테스트 1개가 timeout됐지만 GREEN focused 재실행에서는 재현되지 않았다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 25개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 78개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 사용자 검증
+
+- 사용자는 수동 브라우저 검증을 완료했다고 보고했다.
+- 이 기록은 사용자가 별도 세부 결과를 제공하지 않은 실제 screen reader 안내 순서와 forced-colors 모드를 검증했다고 주장하지 않는다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-06, FR-07, FR-11과 지정 우선순위로 unstaged diff를 검토했고 blocker, major, minor 지적은 없었다.
+- 모든 기존 상세 필드, native dialog·`aria-labelledby`·Esc·닫기·focus 복귀, 검색·필터·보드 scroll 복원 계약을 코드와 테스트에서 확인했다.
+- 네 query 상태의 문구·semantic role·시각 variant와 pending·success의 `role="status"`, failure의 `role="alert"` 및 rollback 문구를 확인했다.
+- failure와 success의 분리 상태, 확인 dialog·이동 상태 로직 불변, 새 dependency·전역 상태·범용 상태 abstraction 부재를 확인했다.
+- 리뷰 후 focused 25개 테스트, lint, `git diff --check`를 다시 실행해 통과를 확인했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(detail-feedback-redesign): 상세 패널과 상태 피드백 위계 개선
+
+  - 상세 정보를 핵심 지원자 정보·연락처·경력·기술·메모 영역으로 구분
+  - query 네 상태와 이동 pending·success·failure 시각 표현 구분
+  - native dialog focus·scroll 복귀와 live region·rollback 상태 소유권 보호
+  ```
+
+- 해시: 최종 동기화 대기

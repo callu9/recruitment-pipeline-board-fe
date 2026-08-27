@@ -51,6 +51,42 @@
   white-space: nowrap;
 }
 
+.feedbackArea {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.feedback {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--feedback-accent);
+  border-left-width: 0.25rem;
+  border-radius: var(--radius-sm);
+  color: var(--feedback-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  background: var(--feedback-background);
+}
+
+.feedbackPending {
+  --feedback-accent: #2563eb;
+  --feedback-background: #eff6ff;
+  --feedback-text: #1e40af;
+}
+
+.feedbackSuccess {
+  --feedback-accent: #15803d;
+  --feedback-background: #f0fdf4;
+  --feedback-text: #166534;
+}
+
+.feedbackFailure {
+  --feedback-accent: #b91c1c;
+  --feedback-background: #fef2f2;
+  --feedback-text: #991b1b;
+}
+
 .toolbar label,
 .moveForm label {
   display: grid;
@@ -129,31 +165,31 @@
   background: var(--color-surface);
 }
 
-.column[data-stage='DOCUMENT_REVIEW'] {
+:is(.column, .detailDialog)[data-stage='DOCUMENT_REVIEW'] {
   --stage-accent: #475569;
   --stage-background: #f1f5f9;
   --stage-text: #334155;
 }
 
-.column[data-stage='INTERVIEW'] {
+:is(.column, .detailDialog)[data-stage='INTERVIEW'] {
   --stage-accent: #2563eb;
   --stage-background: #eff6ff;
   --stage-text: #1e40af;
 }
 
-.column[data-stage='OFFER'] {
+:is(.column, .detailDialog)[data-stage='OFFER'] {
   --stage-accent: #b45309;
   --stage-background: #fffbeb;
   --stage-text: #92400e;
 }
 
-.column[data-stage='HIRED'] {
+:is(.column, .detailDialog)[data-stage='HIRED'] {
   --stage-accent: #15803d;
   --stage-background: #f0fdf4;
   --stage-text: #166534;
 }
 
-.column[data-stage='REJECTED'] {
+:is(.column, .detailDialog)[data-stage='REJECTED'] {
   --stage-accent: #b91c1c;
   --stage-background: #fef2f2;
   --stage-text: #991b1b;
@@ -166,13 +202,53 @@
   min-height: 24rem;
   padding: var(--space-4);
   border: var(--border-default);
+  border-top: 0.25rem solid var(--state-accent);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
 
+.stateLoading {
+  --state-accent: #2563eb;
+
+  background: #eff6ff;
+}
+
+.stateError {
+  --state-accent: #b91c1c;
+
+  background: #fef2f2;
+}
+
+.stateEmpty {
+  --state-accent: #475569;
+
+  background: #f1f5f9;
+}
+
+.stateFilteredEmpty {
+  --state-accent: #b45309;
+
+  background: #fffbeb;
+}
+
+.state h2,
 .state p,
 .columnEmpty {
   margin: 0;
+}
+
+.state h2 {
+  font-size: 1.125rem;
+}
+
+.stateLabel {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.state button {
+  width: fit-content;
 }
 
 .columnEmpty {
@@ -331,29 +407,68 @@
   align-items: start;
   justify-content: space-between;
   gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-default);
 }
 
 .detailHeader h2 {
   margin: 0;
 }
 
+.detailContent {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+}
+
+.detailSection {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.detailSection h3,
+.detailSection p {
+  margin: 0;
+}
+
+.detailSection h3 {
+  font-size: 1rem;
+}
+
 .detailList {
   display: grid;
-  gap: var(--space-4);
-  margin: var(--space-5) 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
 }
 
 .detailList div {
   display: grid;
   gap: var(--space-1);
+  align-content: start;
+  padding: var(--space-3);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-canvas);
 }
 
 .detailList dt {
-  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .detailList dd {
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detailNote {
+  min-height: 4rem;
+  padding: var(--space-3);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-canvas);
 }
 
 .confirmationDialog {
@@ -377,4 +492,10 @@
   justify-content: end;
   gap: 0.5rem;
   margin-top: 1.5rem;
+}
+
+@media (max-width: 30rem) {
+  .detailList {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
