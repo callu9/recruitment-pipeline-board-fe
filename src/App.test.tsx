@@ -127,14 +127,23 @@ test('opens applicant details and restores the trigger focus when the dialog clo
   const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' })
   expect(dialog).toHaveAttribute('open')
   expect(dialog).toHaveAttribute('aria-labelledby')
-  expect(within(dialog).getByText('Frontend Developer')).toBeInTheDocument()
-  expect(within(dialog).getByText('2026.08.01')).toBeInTheDocument()
-  expect(within(dialog).getByText('서류검토')).toBeInTheDocument()
-  expect(within(dialog).getByText('minji@example.com')).toBeInTheDocument()
-  expect(within(dialog).getByText('010-0000-0001')).toBeInTheDocument()
-  expect(within(dialog).getByText('3년')).toBeInTheDocument()
-  expect(within(dialog).getByText('React, TypeScript')).toBeInTheDocument()
-  expect(within(dialog).getByText('B2B SaaS 경험 보유')).toBeInTheDocument()
+  expect(dialog).toHaveAttribute('data-stage', 'DOCUMENT_REVIEW')
+
+  const summary = within(dialog).getByRole('region', { name: '핵심 지원자 정보' })
+  expect(within(summary).getByText('Frontend Developer')).toBeInTheDocument()
+  expect(within(summary).getByText('2026.08.01')).toBeInTheDocument()
+  expect(within(summary).getByText('서류검토')).toHaveClass(styles.stageTag)
+
+  const contact = within(dialog).getByRole('region', { name: '연락처' })
+  expect(within(contact).getByText('minji@example.com')).toBeInTheDocument()
+  expect(within(contact).getByText('010-0000-0001')).toBeInTheDocument()
+
+  const experience = within(dialog).getByRole('region', { name: '경력·기술' })
+  expect(within(experience).getByText('3년')).toBeInTheDocument()
+  expect(within(experience).getByText('React, TypeScript')).toBeInTheDocument()
+
+  const note = within(dialog).getByRole('region', { name: '메모' })
+  expect(within(note).getByText('B2B SaaS 경험 보유')).toBeInTheDocument()
 
   fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -394,7 +403,9 @@ test('moves an applicant after the stage PATCH succeeds', async () => {
   expect(await within(interviewColumn).findByText('김민지')).toBeInTheDocument()
   expect(requestBody).toEqual({ stage: 'INTERVIEW' })
   expect(within(documentReviewColumn).queryByText('김민지')).not.toBeInTheDocument()
-  expect(await screen.findByRole('status')).toHaveTextContent('김민지님을 면접(으)로 이동했습니다.')
+  const success = await screen.findByRole('status')
+  expect(success).toHaveTextContent('김민지님을 면접(으)로 이동했습니다.')
+  expect(success).toHaveClass(styles.feedbackSuccess)
 })
 
 test('shows terminal-stage status instead of a move form', async () => {
@@ -480,7 +491,9 @@ test('moves an applicant to the target column before a delayed stage PATCH succe
   expect(within(documentReviewColumn).queryByRole('heading', { name: '김민지' })).not.toBeInTheDocument()
   const pendingForm = within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })
   expect(pendingForm).toHaveAttribute('aria-busy', 'true')
-  expect(screen.getByRole('status')).toHaveTextContent('김민지님의 단계를 저장하는 중입니다.')
+  const pending = screen.getByRole('status')
+  expect(pending).toHaveTextContent('김민지님의 단계를 저장하는 중입니다.')
+  expect(pending).toHaveClass(styles.feedbackPending)
   resolveSuccess(HttpResponse.json({ ...applicant, stage: 'INTERVIEW' }))
   await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
 })
@@ -524,7 +537,9 @@ test('keeps the applicant in the current stage and shows feedback when a stage P
 
   expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
   resolveFailure(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
+  const failure = await screen.findByRole('alert')
+  expect(failure).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
+  expect(failure).toHaveClass(styles.feedbackFailure)
   expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
   await waitFor(() => expect(within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
 })
@@ -581,7 +596,9 @@ test('restores only the failed applicant when another applicant move succeeds', 
   resolveB(HttpResponse.json({ ...applicants[1], stage: 'INTERVIEW' }))
   await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
   expect(screen.getByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
+  expect(screen.getByRole('alert')).toHaveClass(styles.feedbackFailure)
   expect(screen.getByRole('status')).toHaveTextContent('이준호님을 면접(으)로 이동했습니다.')
+  expect(screen.getByRole('status')).toHaveClass(styles.feedbackSuccess)
 })
 
 test('blocks a rapid second move for the same applicant while its PATCH is pending', async () => {
@@ -695,7 +712,8 @@ test('shows an accessible loading board while the applicants query is pending', 
 
   const loadingBoard = screen.getByRole('region', { name: '지원자 정보 로딩' })
   expect(loadingBoard).toHaveAttribute('aria-busy', 'true')
-  expect(within(loadingBoard).getByText('지원자 정보를 불러오는 중입니다.')).toBeInTheDocument()
+  expect(within(loadingBoard).getByRole('heading', { name: '지원자 정보를 불러오는 중입니다.' })).toBeInTheDocument()
+  expect(loadingBoard).toHaveClass(styles.stateLoading)
 })
 
 test('shows a non-technical query error and restores the board after retry succeeds', async () => {
@@ -716,6 +734,8 @@ test('shows a non-technical query error and restores the board after retry succe
   const error = await screen.findByRole('alert')
   expect(error).toHaveTextContent('지원자 정보를 불러오지 못했습니다.')
   expect(error).not.toHaveTextContent('database password leaked')
+  expect(within(error).getByRole('heading', { name: '지원자 정보를 불러오지 못했습니다.' })).toBeInTheDocument()
+  expect(error).toHaveClass(styles.stateError)
 
   fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
 
@@ -729,7 +749,9 @@ test('shows a distinct empty state when the source applicants list is empty', as
 
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
 
-  expect(await screen.findByText('등록된 지원자가 없습니다.')).toBeInTheDocument()
+  const emptyState = await screen.findByRole('region', { name: '등록된 지원자 없음' })
+  expect(within(emptyState).getByRole('heading', { name: '등록된 지원자가 없습니다.' })).toBeInTheDocument()
+  expect(emptyState).toHaveClass(styles.stateEmpty)
   expect(screen.queryByText('현재 검색 조건에 맞는 지원자가 없습니다.')).not.toBeInTheDocument()
 })
 
@@ -745,8 +767,10 @@ test('shows a filter empty state and resets the existing filters', async () => {
   await screen.findByText('김민지')
   fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: '없는 이름' } })
 
-  const emptyState = await screen.findByText('현재 검색 조건에 맞는 지원자가 없습니다.')
-  fireEvent.click(within(emptyState.closest('section')!).getByRole('button', { name: '필터 초기화' }))
+  const emptyState = await screen.findByRole('region', { name: '검색 결과 없음' })
+  expect(within(emptyState).getByRole('heading', { name: '현재 검색 조건에 맞는 지원자가 없습니다.' })).toBeInTheDocument()
+  expect(emptyState).toHaveClass(styles.stateFilteredEmpty)
+  fireEvent.click(within(emptyState).getByRole('button', { name: '필터 초기화' }))
   expect(await screen.findByText('김민지')).toBeInTheDocument()
 })
 
