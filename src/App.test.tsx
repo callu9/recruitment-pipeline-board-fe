@@ -141,7 +141,7 @@ test('opens applicant details and restores the trigger focus when the dialog clo
   expect(detailTrigger).toHaveFocus()
 })
 
-test('restores focus after the browser closes the dialog with Escape', async () => {
+test('closes applicant details on Escape and restores focus', async () => {
   const applicant: Applicant = {
     id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
     stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
@@ -154,8 +154,8 @@ test('restores focus after the browser closes the dialog with Escape', async () 
   detailTrigger.focus()
   fireEvent.click(detailTrigger)
 
-  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' }) as HTMLDialogElement
-  dialog.close()
+  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' })
+  fireEvent.keyDown(dialog, { key: 'Escape' })
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   expect(detailTrigger).toHaveFocus()
 })
@@ -217,7 +217,7 @@ test('renders the project shell title', () => {
   expect(screen.getByRole('heading', { name: '채용 파이프라인 보드' })).toBeInTheDocument()
 })
 
-test('renders the five stage columns in their defined order', async () => {
+test('renders the five stage columns in their defined order with stage visual hooks', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   const { container } = render(
     <QueryClientProvider client={new QueryClient()}>
@@ -226,7 +226,13 @@ test('renders the five stage columns in their defined order', async () => {
   )
 
   await within(container).findByRole('region', { name: '채용 단계 보드' })
-  const stages = ['서류검토', '면접', '처우협의', '최종합격', '불합격']
+  const stages = [
+    ['DOCUMENT_REVIEW', '서류검토'],
+    ['INTERVIEW', '면접'],
+    ['OFFER', '처우협의'],
+    ['HIRED', '최종합격'],
+    ['REJECTED', '불합격'],
+  ]
   const columns = within(container)
     .getAllByRole('region')
     .filter((region) => region.getAttribute('aria-labelledby')?.startsWith('stage-'))
@@ -237,8 +243,9 @@ test('renders the five stage columns in their defined order', async () => {
   )
 
   columns.forEach((column, index) => {
-    expect(within(column).getByRole('heading', { name: stages[index] })).toBeInTheDocument()
-    expect(within(column).getByText(/\d+명/)).toBeInTheDocument()
+    expect(column).toHaveAttribute('data-stage', stages[index]?.[0])
+    expect(within(column).getByRole('heading', { name: stages[index]?.[1] })).toBeInTheDocument()
+    expect(within(column).getByText(/\d+명/)).toHaveClass(styles.stageCount)
   })
 
   const boardViewport = await within(container).findByRole('region', { name: '채용 단계 보드' })
@@ -285,11 +292,11 @@ test('renders fetched applicants once in their stages with matching counts', asy
   const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
   const interviewColumn = within(container).getByRole('region', { name: '면접' })
 
-  expect(within(documentReviewColumn).getByText('1명')).toBeInTheDocument()
+  expect(within(documentReviewColumn).getByText('1명')).toHaveClass(styles.stageCount)
   expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
   expect(within(documentReviewColumn).getByText('Frontend Developer')).toBeInTheDocument()
   expect(within(documentReviewColumn).getByText('2026.08.01')).toBeInTheDocument()
-  expect(within(documentReviewColumn).getByText('현재 단계: 서류검토')).toBeInTheDocument()
+  expect(within(documentReviewColumn).getByText('현재 단계: 서류검토')).toHaveClass(styles.stageTag)
   expect(within(interviewColumn).getByText('1명')).toBeInTheDocument()
   expect(within(interviewColumn).getByText('이준호')).toBeInTheDocument()
   expect(within(container).getAllByText('김민지')).toHaveLength(1)
