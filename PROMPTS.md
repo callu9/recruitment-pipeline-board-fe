@@ -249,7 +249,21 @@ AGENTS.md와 아래를 읽고 작업. 참고: 이번 작업 scope는 project-set
 
 ### 프롬프트 1 — 세션 로그 선택 방식 개선
 
-(실제 hook 로그에 저장된 구현 지시 원문을 여기에 그대로 삽입)
+커밋 전 `PROMPTS.md` 추가할 내용 산출은 자동화됐지만, 입력 자동화는 되지 않았다. 훅을 개선하고
+세션에서 응답을 줄 때 매번 PROMPTS.md 리뷰한 내용을 포함할 수 있도록 응답 포맷을 개선하고자 한다.
+scope: prompt-workflow
+
+1. capture-prompt.mjs가 프롬프트 저장 후 현재 session_id를
+   PROMPT_LOG_SESSION_ID 형식의 additionalContext로 반환하도록 수정한다.
+
+2. prompt-record/SKILL.md가 PROMPT\LOG_SESSION_ID에 해당하는
+   .codex/session-logs/<session_id>.jsonl 하나만 읽도록 수정한다.
+
+3. ID가 없거나 파일이 없으면 최신 로그를 추측하지 말고 중단한다.
+
+4. 관련 단위 테스트를 추가하고 실행한다.
+
+사이드 대화 로그는 삭제하거나 읽지 않고 무시한다.
 
 ### AI 출력 요지
 
@@ -1466,7 +1480,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 - 메시지:
 
   ```text
-  feat(search-filter): 이름 검색과 데이터 기반 직무 필터 구현
+  feat(search-filter): 이름 검색과 데이터 기반 직무 필터
 
   - Query cache 원본 목록을 이름·직무 조건으로 순수 필터링
   - 현재 데이터 기반 직무 옵션과 필터 초기화 UI 추가
@@ -1814,7 +1828,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 - 해시: `9caa7da`
 - AI 초안 수정 요약: 초기 상태에서도 빈 보드를 렌더링하던 기존 흐름을 상태 우선순위 분기로 교체했다.
 
-## [fix(a11y-live-status)] 단계 이동 라이브 상태 메시지
+## [a11y-live-status] 단계 이동 라이브 상태 메시지
 
 ### 목표 / 수용 기준
 
@@ -1916,7 +1930,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   fix(a11y-live-status): 이동 상태 알림 접근성 보완
@@ -1926,7 +1940,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
   - A 실패/B 성공 경쟁 상태 회귀 테스트 추가
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `8b25cc8`
 
 ## [submission-review] 제출 전 프롬프트 기록 정합성 검토
 
@@ -1971,7 +1985,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   docs(submission-review): 프롬프트 기록 정합성 동기화
@@ -1980,7 +1994,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
   - 제출용 빈 feature 템플릿을 제거
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `4c05c42`
 - AI 초안 수정 요약: 코드 변경 없이 scope·subject·커밋 본문이 모두 일치하는 기록만 동기화했다.
 
 ## [prompt-record-validation-order] 사용자 검증 이후 기록·스테이징
@@ -2042,7 +2056,7 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   chore(prompt-record-validation-order): 사용자 검증 게이트 순서 정리
@@ -2052,9 +2066,9 @@ docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md, DECISIONS.md, PROMPTS.md 및 현재 �
   - 기록 순서 계약 테스트 추가
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `6dcaac7`
 
-## [docs(decision-a11y)] 단계 이동 라이브 상태 판단 기록
+## [decision-a11y] 단계 이동 라이브 상태 판단 기록
 
 ### 목표 / 수용 기준
 
@@ -2137,7 +2151,7 @@ unstaged diff 요약·실제 결과·사용자가 확인할 문서 항목을 보
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   docs(decision-a11y): 라이브 상태 알림 판단 기록
@@ -2146,7 +2160,7 @@ unstaged diff 요약·실제 결과·사용자가 확인할 문서 항목을 보
   - A 실패 뒤 B 성공에도 실패 안내를 보존하는 상태 분리 근거를 명시
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `faa0bbb`
 
 ## [stage-transition-policy] 단방향 단계 전이 정책
 
@@ -2346,17 +2360,17 @@ AGENTS.md와 다음 문서를 지정된 순서로 읽어라.
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(stage-transition-policy): 채용 단계의 단방향 전이 강제
 
-  - UI와 mock API가 공유하는 순수 전이 정책 추가
-  - 금지 전이를 409 INVALID_TRANSITION으로 저장 전 차단
-  - 종료 상태 UI와 전이·회귀 테스트 및 문서 갱신
+  - 활성 단계별 허용된 다음 단계와 불합격 경로 정의
+  - UI와 mock API가 동일한 순수 전이 정책을 사용
+  - 종료 상태와 금지된 이동의 저장 차단을 테스트로 검증
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `5073730`
 
 ## [stage-change-confirmation] 단계 변경 전 최종 확인
 
@@ -2586,17 +2600,18 @@ DECISIONS.md에는 다음 결정을 기록한다.
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
-  feat(stage-change-confirmation): 단계 변경 전 최종 확인 추가
+  feat(stage-change-confirmation): 단계 변경 전 사용자 확인 추가
 
-  - native dialog에서 지원자와 단계 변경을 확인한 뒤에만 PATCH 실행
-  - 취소·Esc의 상태 불변과 focus 복귀를 검증
-  - 기존 optimistic update·rollback·pending guard 회귀 보존
+  - 지원자·현재 단계·목표 단계를 native dialog로 확인
+  - 확인 전과 취소 시 cache·저장소 변경을 차단
+  - 확인 후 기존 낙관적 업데이트·rollback·pending guard 재사용
+  - 운영 결정과 실제 사용자 검증을 문서·PROMPTS 기록에 반영
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `4ee37a7`
 
 ## 좋은 리뷰 예시
 
@@ -2817,7 +2832,7 @@ prompt-record, staging, commit을 진행하지 마라.
 
 ### 연결 커밋
 
-- 예정 메시지:
+- 메시지:
 
   ```text
   feat(seed-data-variety): 한글·영문 혼합 시드 데이터 제공
@@ -2827,7 +2842,7 @@ prompt-record, staging, commit을 진행하지 마라.
   - 실제 seed 기반 영문 대소문자 검색 검증 지원
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `67c1f5e`
 
 ## [decision-record-consolidation] 핵심 결정 5개로 문서 정리
 
@@ -2876,4 +2891,4 @@ DECISIONS.md 내용이 5개 이하로 조정 필요한 것으로 이해함. 내�
   - 문서 검증과 전체 품질 명령을 재실행
   ```
 
-- 해시: 최종 동기화 대기
+- 해시: `ad2b2e2`
