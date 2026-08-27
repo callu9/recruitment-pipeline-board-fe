@@ -186,24 +186,31 @@ function App() {
         <h1>채용 파이프라인 보드</h1>
       </header>
       <form className={styles.toolbar} aria-label="지원자 필터" onSubmit={(event) => event.preventDefault()}>
-        <label>
-          이름 검색
-          <input value={nameQuery} onChange={(event) => setNameQuery(event.target.value)} />
-        </label>
-        <label>
-          직무 필터
-          <select value={role} onChange={(event) => setRole(event.target.value as ApplicantRole | 'ALL')}>
-            <option value="ALL">전체</option>
-            {roles.map((currentRole) => (
-              <option key={currentRole} value={currentRole}>
-                {currentRole}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={resetFilters}>
-          필터 초기화
-        </button>
+        <div className={styles.filterControls}>
+          <label>
+            이름 검색
+            <input value={nameQuery} onChange={(event) => setNameQuery(event.target.value)} />
+          </label>
+          <label>
+            직무 필터
+            <select value={role} onChange={(event) => setRole(event.target.value as ApplicantRole | 'ALL')}>
+              <option value="ALL">전체</option>
+              {roles.map((currentRole) => (
+                <option key={currentRole} value={currentRole}>
+                  {currentRole}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={resetFilters}>
+            필터 초기화
+          </button>
+        </div>
+        {!isPending && !isError && (
+          <p className={styles.resultSummary} aria-live="polite">
+            전체 {applicants.length}명 중 {filteredApplicants.length}명 표시
+          </p>
+        )}
       </form>
       {moveError && <p role="alert">{moveError}</p>}
       {moveSuccess && <p role="status">{moveSuccess}</p>}
@@ -244,30 +251,34 @@ function App() {
                     /* ApplicantCard: 지원자의 목록 정보와 현재 단계를 표시한다. */
                     <article key={applicant.id} className={styles.card}>
                       <h3>{applicant.name}</h3>
-                      <p>{applicant.role}</p>
-                      <p>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
                       <p className={styles.stageTag}>현재 단계: {stage.label}</p>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          const board = boardViewportRef.current
-                          if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
-                          detailTriggerRef.current = event.currentTarget
-                          setSelectedApplicantId(applicant.id)
-                        }}
-                      >
-                        {applicant.name} 상세 열기
-                      </button>
-                      {getAllowedNextStages(applicant.stage).length > 0 ? (
-                        <StageMoveForm
-                          applicant={applicant}
-                          isPending={pendingIds.has(applicant.id)}
-                          onConfirmRequest={(targetStage, trigger) => {
-                            confirmationTriggerRef.current = trigger
-                            setStageChangeConfirmation({ applicantId: applicant.id, targetStage })
+                      <div className={styles.cardMetadata}>
+                        <p><span>직무</span>{applicant.role}</p>
+                        <p><span>지원일</span>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            const board = boardViewportRef.current
+                            if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
+                            detailTriggerRef.current = event.currentTarget
+                            setSelectedApplicantId(applicant.id)
                           }}
-                        />
-                      ) : <p>종료된 단계입니다.</p>}
+                        >
+                          {applicant.name} 상세 열기
+                        </button>
+                        {getAllowedNextStages(applicant.stage).length > 0 ? (
+                          <StageMoveForm
+                            applicant={applicant}
+                            isPending={pendingIds.has(applicant.id)}
+                            onConfirmRequest={(targetStage, trigger) => {
+                              confirmationTriggerRef.current = trigger
+                              setStageChangeConfirmation({ applicantId: applicant.id, targetStage })
+                            }}
+                          />
+                        ) : <p>종료된 단계입니다.</p>}
+                      </div>
                     </article>
                   ))}
                 </div>

@@ -303,6 +303,55 @@ test('renders fetched applicants once in their stages with matching counts', asy
   expect(within(container).getAllByText('이준호')).toHaveLength(1)
 })
 
+test('shows the filtered result count in the toolbar and resets its context', async () => {
+  const applicants: Applicant[] = [
+    {
+      id: 'applicant-1', name: 'Alex Kim', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+      stage: 'DOCUMENT_REVIEW', email: 'alex@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+    },
+    {
+      id: 'applicant-2', name: 'Alex Park', role: 'Product Designer', appliedAt: '2026-08-02T09:00:00.000Z',
+      stage: 'INTERVIEW', email: 'park@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Figma'], note: '',
+    },
+  ]
+  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const toolbar = screen.getByRole('form', { name: '지원자 필터' })
+  expect(await within(toolbar).findByText('전체 2명 중 2명 표시')).toBeInTheDocument()
+
+  fireEvent.change(within(toolbar).getByLabelText('직무 필터'), { target: { value: 'Frontend Developer' } })
+  expect(within(toolbar).getByText('전체 2명 중 1명 표시')).toBeInTheDocument()
+
+  fireEvent.click(within(toolbar).getByRole('button', { name: '필터 초기화' }))
+  expect(within(toolbar).getByText('전체 2명 중 2명 표시')).toBeInTheDocument()
+})
+
+test('orders card information and keeps detail and move controls as separate sibling actions', async () => {
+  const applicant: Applicant = {
+    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
+    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
+  }
+  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+
+  const card = (await screen.findByRole('heading', { name: '김민지' })).closest('article')!
+  expect(Array.from(card.querySelectorAll('h3, p')).slice(0, 4).map(({ textContent }) => textContent)).toEqual([
+    '김민지',
+    '현재 단계: 서류검토',
+    '직무Frontend Developer',
+    '지원일2026.08.01',
+  ])
+
+  const detailButton = within(card).getByRole('button', { name: '김민지 상세 열기' })
+  const moveForm = within(card).getByRole('form', { name: '김민지 단계 이동' })
+  expect(detailButton.closest('form')).toBeNull()
+  expect(detailButton.parentElement).toBe(moveForm.parentElement)
+  expect(detailButton.parentElement).not.toBe(card)
+})
+
 test('moves an applicant after the stage PATCH succeeds', async () => {
   const applicant: Applicant = {
     id: 'applicant-1',

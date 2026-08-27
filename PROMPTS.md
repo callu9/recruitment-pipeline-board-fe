@@ -3409,3 +3409,156 @@ esc 닫기 안 됨. 또한 보드 영역 가로폭이 너무 좁은 것 같아 �
   ```
 
 - 해시: 최종 동기화 대기
+
+## [board-density] 보드 정보 위계와 카드 밀도 개선
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-01, FR-02, FR-05, FR-11.
+- 검색 input, 직무 filter, 초기화 button, 결과 맥락의 시각적 위계를 개선한다.
+- 다섯 컬럼의 header, count, 카드 목록 간격을 정리하고 카드 정보를 이름, 현재 단계, 직무, 지원일, 액션 순서로 표시한다.
+- 상세 열기 button과 단계 이동 form을 별도 인터랙션으로 유지한다.
+- 기존 단계별 시각 언어, design-foundation 토큰, 검색·직무 AND 조건, 초기화, 결과 count, 보드 내부 가로 스크롤을 유지한다.
+- 새 라이브러리, 범용 UI 컴포넌트, query·mutation·전이 정책 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. feat(design-foundation), feat(stage-visual-language) 커밋과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 board-density 하나뿐이며 branch는 feat/board-density여야 한다.
+
+연결 요구사항은 FR-01, FR-02, FR-05, FR-11이다.
+
+완료 기준:
+
+- 검색 input, 직무 filter, 초기화 button, 결과 맥락의 시각적 위계를 개선한다.
+- 다섯 컬럼의 header, count, 카드 목록 간격과 스캔 가능성을 개선한다.
+- 카드 정보 순서를 이름, 현재 단계, 직무, 지원일, 액션 영역으로 명확히 정리한다.
+- 상세 열기 button과 단계 이동 form은 중첩하지 않고 별도 인터랙션으로 유지한다.
+- 기존 단계별 시각 언어와 design-foundation 토큰을 재사용한다.
+- 검색·직무 AND 조건, 필터 초기화, 결과 count, 보드 내부 가로 스크롤을 유지한다.
+- 768px을 포함한 좁은 viewport에서도 페이지 전체가 아닌 보드 영역만 가로 스크롤된다.
+
+최소 구현 원칙:
+
+- 현재 단일 화면 구조에서 필요한 JSX 그룹과 CSS class만 추가한다.
+- 범용 Card, Toolbar, Stack, Button 컴포넌트로 추상화하지 않는다.
+- 새 레이아웃·아이콘·날짜 라이브러리를 추가하지 않는다.
+- 검색 selector, Query cache, mutation, 전이 정책을 수정하지 않는다.
+- 카드 action을 하나의 큰 button으로 합치거나 button 안에 form을 넣지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: toolbar 결과 맥락과 카드 정보·action 영역을 위한 최소 semantic grouping 및 정보 순서 조정
+- src/App.module.css: toolbar, column, card, metadata, action 영역의 간격·위계·반응형 표현
+- src/App.test.tsx: 정보 표시와 상세 button·이동 form 분리 및 기존 필터/scroll 계약의 필요한 회귀 보호
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- 단계 색상 체계 재설계
+- 상세 dialog와 상태·feedback 재설계
+- 확인 dialog 재설계
+- 테이블 view, pagination, 정렬 UI, 일괄 작업, drag and drop, Undo
+- 검색 debounce, useDeferredValue, 가상화
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast
+- 관련 없는 component 분리·refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 마크업과 CSS 토큰·단계 시각 언어를 재사용하는 방식
+5. toolbar, column, card의 최소 정보 위계 변경
+6. 상세 button과 이동 form 분리 보존 방법
+7. 자동 검증 시나리오
+8. 1440px, 1024px, 768px 수동 브라우저 검증 시나리오
+9. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 사용자 검증 완료 및 읽기 전용 diff 리뷰
+
+````text
+확인 및 검증 완료.&#x20;
+
+현재 feat/board-density 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-01, FR-02, FR-05, FR-11이며 scope는 board-density 하나다.
+
+우선순위:
+
+1. toolbar와 5개 컬럼의 정보 위계가 실제로 개선되는가
+2. 카드 정보가 이름, 단계, 직무, 지원일, 액션 순서로 읽히는가
+3. 상세 열기 button과 이동 form이 중첩되거나 하나의 click target으로 합쳐지지 않았는가
+4. 검색·직무 AND 조건, 초기화, 결과 count가 유지되는가
+5. 좁은 viewport에서 body가 아니라 boardViewport가 가로 스크롤되는가
+6. 단계별 시각 언어, focus-visible, disabled, pending 표현이 유지되는가
+7. query·mutation·전이 정책 등 동작 범위가 불필요하게 수정되지 않았는가
+8. 불필요한 component abstraction, dependency, responsive framework가 없는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- 현재 `ui-redesign`의 clean HEAD에서 `feat/board-density` branch를 생성하고 scope를 세 파일로 제한했다.
+- 기존 toolbar form 안에 필터 컨트롤과 전체·필터 결과 맥락을 분리하고, 카드 마크업을 이름, 현재 단계, 직무, 지원일, 액션 순서로 재배치했다.
+- 상세 열기 button과 단계 이동 form을 독립 sibling으로 유지하고, 기존 stage code·화면 토큰으로 컬럼·카드·액션 위계와 좁은 viewport 표현을 조정했다.
+- selector, Query cache, mutation, 전이 정책과 dependency는 변경하지 않고 관련 통합 테스트로 기존 계약을 회귀 보호했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 toolbar의 filter/result grouping과 카드 metadata/action grouping만 추가했다.
+- `src/App.module.css`는 기존 토큰과 컬럼의 `--stage-*` 변수를 재사용해 toolbar, column header, card list, metadata, action과 `48rem` 이하 표현만 조정했다.
+- `src/App.test.tsx`는 결과 count와 카드 정보 순서, 상세 button·이동 form의 sibling 구조를 보호하는 통합 테스트 2개를 추가했다.
+- 새 범용 Card·Toolbar·Stack·Button 컴포넌트, 새 dependency·responsive framework·전역 token, 검색 최적화와 동작 로직 변경은 필요하지 않아 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- TDD RED: 기존 마크업에서 toolbar 결과 요약 부재와 카드 정보 순서 때문에 새 테스트 2개가 실패하는 것을 확인했다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 25개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 78개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 사용자 검증
+
+- 사용자는 변경사항 확인 및 검증을 완료했다고 보고했다.
+- 이 기록은 사용자가 별도 세부 결과를 제공하지 않은 screen reader 안내 순서와 forced-colors 모드를 검증했다고 주장하지 않는다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-01, FR-02, FR-05, FR-11과 지정 우선순위로 unstaged diff를 검토했고 blocker, major, minor 지적은 없었다.
+- toolbar·다섯 컬럼의 위계, 카드 정보 순서, 상세 button·이동 form 분리, AND 필터·초기화·결과 count, boardViewport 내부 스크롤 CSS 계약을 확인했다.
+- 기존 단계 시각 언어, focus-visible, disabled, pending 표현이 유지되고 query·mutation·전이 정책, dependency와 범용 abstraction 변경이 없음을 확인했다.
+- 리뷰 후 focused 25개 테스트와 lint를 다시 실행해 통과를 확인했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(board-density): 보드 정보 위계와 카드 밀도 개선
+
+  - 검색·직무 필터와 전체·필터 결과 count의 toolbar 위계 정리
+  - 카드 정보를 이름·단계·직무·지원일·독립 action 순서로 재배치
+  - 기존 단계 시각 언어와 보드 내부 스크롤·상호작용 계약 회귀 보호
+  ```
+
+- 해시: 최종 동기화 대기
