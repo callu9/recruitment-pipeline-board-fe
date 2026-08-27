@@ -2892,3 +2892,849 @@ DECISIONS.md 내용이 5개 이하로 조정 필요한 것으로 이해함. 내�
   ```
 
 - 해시: `ad2b2e2`
+
+
+## [design-foundation] 리디자인 기반 토큰과 기본 컨트롤 상태
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-05, FR-11, TECH_SPEC D-009.
+- 현재 화면에서 실제 사용하는 색상, 간격, 타이포, radius, border, shadow, focus 토큰만 정의한다.
+- native `button`, `input`, `select`의 hover, focus-visible, disabled 상태를 개선한다.
+- 기존 semantic HTML, 키보드 접근, pending·disabled 처리, dialog focus 복귀 계약을 유지한다.
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast, 범용 UI 컴포넌트 추상화는 추가하지 않는다.
+
+### 프롬프트 1 — 리디자인 worktree와 scope 전략 확정
+
+````text
+리디자인 작업을 다음 전략으로 진행한다.
+
+먼저 아래 문서를 순서대로 읽고 현재 Git 상태와 진행 중인 feature scope를 확인해라.
+
+1. `docs/ASSIGNMENT.md`
+2. `docs/PRD.md`
+3. `docs/TECH_SPEC.md`
+4. `docs/IMPLEMENTATION_AND_COMMIT_PLAN.md`
+5. `PROMPTS.md`의 현재 feature section
+6. `DECISIONS.md`
+7. 최근 커밋과 현재 코드
+
+## 확정된 기술 방향
+
+이번 리디자인에서는 Ant Design, Carbon, SLDS 등 외부 UI 컴포넌트 라이브러리를 설치하지 않는다.
+
+외부 UI 라이브러리가 과제에서 금지된 것은 아니지만, 현재 요구사항은 다음과 같다.
+
+- 단계별 태그
+- 컬럼 강조
+- button, input, select 상태
+- 카드 정보 위계
+- 상세·피드백 화면의 시각 개선
+
+이 요구사항은 기존 native HTML과 CSS Modules로 충족할 수 있다.
+
+기존 `<select>`, `<button>`, `<dialog>`에는 다음 계약이 이미 존재한다.
+
+- 키보드 접근
+- focus 복귀
+- disabled 및 pending 상태
+- semantic HTML
+- 관련 자동 테스트
+
+리디자인 과정에서 이를 라이브러리 컴포넌트로 교체하지 말고 기존 동작과 semantic HTML을 유지해라.
+
+Ant Design 도입은 다음 기능이 실제 PRD와 수용 기준으로 승인된 이후에만 재검토한다.
+
+- 복합 데이터 테이블
+- 대량 편집 폼
+- 정렬과 페이지네이션
+- 일괄 선택·일괄 작업
+- 복잡한 관리자 워크플로우
+
+다음을 추가하지 않는다.
+
+- 새 UI 컴포넌트 라이브러리
+- CSS-in-JS
+- 전역 상태
+- toast 시스템
+- 범용 UI 컴포넌트 추상화
+
+## 브랜치·워크트리 전략
+
+현재 checkout의 미커밋 변경은 기존 작업 공간에 그대로 보존한다.
+
+현재 checkout이 dirty라는 이유만으로 worktree 생성을 중단하지 마라. 리디자인 worktree는 working tree가 아니라 최신 committed `main`을 base로 생성한다.
+
+따라서 기존 checkout의 staged, unstaged, untracked 변경은 새 worktree에 포함하지 않는다.
+
+기존 checkout에서 다음을 하지 마라.
+
+- stash
+- restore
+- 미커밋 파일 삭제 또는 수정
+- 기존 변경 staging
+- 기존 변경 commit
+- 미커밋 변경을 새 worktree에 복사
+- 기존 작업 scope와 리디자인 scope 혼합
+
+현재 checkout에 진행 중인 별도 feature 변경이 있어도 이를 완료하거나 정리하지 마라. 해당 변경은 사용자 소유 작업으로 보존하고, committed `main` 기준의 별도 worktree에서 리디자인을 진행해라.
+
+worktree 생성 전에 다음을 읽기 전용으로 확인한다.
+
+- 현재 저장소와 branch 상태
+- committed `main`의 HEAD
+- `main`과 현재 로컬 `origin/main`의 일치 여부
+- `ui-redesign` branch 존재 여부
+- 대상 worktree 경로 존재 여부
+- 현재 worktree 목록
+
+현재 checkout의 dirty 상태는 blocker가 아니다.
+
+다음 경우에만 blocker로 보고하고 생성하지 마라.
+
+- committed `main`과 로컬 `origin/main`이 일치하지 않음
+- `ui-redesign` branch가 이미 존재함
+- 대상 worktree 경로가 이미 존재함
+- 동일 branch가 다른 worktree에서 사용 중임
+- worktree 생성 명령이 실패함
+
+조건을 충족하면 다음 branch와 worktree를 생성한다.
+
+- branch: `ui-redesign`
+- worktree: `../recruitment-pipeline-board-fe-ui-redesign`
+- base: 최신 committed `main`
+- branch prefix: 없음
+
+`codex/` 또는 다른 prefix를 붙이지 마라.
+
+사용할 명령:
+
+```bash
+git worktree add ../recruitment-pipeline-board-fe-ui-redesign \
+  -b ui-redesign main
+```
+
+생성 후에는 새 worktree에서만 작업한다. 기존 checkout과 그 미커밋 변경은 건드리지 않는다.
+
+새 worktree에서 다음을 확인한다.
+
+- 현재 branch가 `ui-redesign`인지
+- HEAD가 생성 당시 committed `main`과 같은지
+- `git status`가 clean인지
+- 기존 미커밋 변경이 새 worktree에 포함되지 않았는지
+
+의존성 설치가 필요하면 기존 lockfile을 사용하고 새 dependency를 추가하지 않는다. 설치 과정에서 추적 파일이 변경되면 진행하지 말고 blocker로 보고한다.
+
+새 worktree의 baseline으로 다음을 실행한다.
+
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `git diff --check`
+
+baseline이 실패하면 리디자인 코드를 작성하지 말고 실제 실패 결과를 보고한다.
+
+## 리디자인 branch 구성
+
+`ui-redesign`은 리디자인 전체를 담는 하나의 branch다.
+
+아래 항목은 별도 branch가 아니라 순차적으로 진행하는 feature commit scope다.
+
+```text
+main
+└─ ui-redesign
+   ├─ feat(design-foundation)
+   ├─ feat(stage-visual-language)
+   ├─ feat(board-density)
+   └─ feat(detail-feedback-redesign)
+```
+
+한 scope를 구현·검증·기록·commit한 뒤에만 다음 scope로 이동한다.
+
+각 scope에서 `PROMPTS.md` 제목과 commit message의 scope를 정확히 일치시켜라.
+
+예:
+
+- `[design-foundation]`
+- `feat(design-foundation): ...`
+
+## Scope별 목적
+
+### 1. design-foundation
+
+- 현재 화면에서 실제 사용하는 색상, 간격, 타이포, radius, border, shadow, focus 토큰만 정의
+- button, input, select의 hover, focus-visible, disabled 상태 개선
+- 사용되지 않는 토큰이나 범용 UI 컴포넌트 추상화 금지
+- 기존 native control 동작 유지
+- 연결 근거: FR-05, FR-11, TECH_SPEC의 CSS Modules 결정
+
+### 2. stage-visual-language
+
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 시각적으로 구분
+- 컬럼 accent, 단계 태그, 인원수 badge에 일관된 단계 색상 적용
+- 색상만으로 상태를 전달하지 않고 단계 텍스트 유지
+- 기존 `STAGES` 메타데이터와 단계 전이 정책 재사용
+- 연결 요구사항: FR-01, FR-02, FR-11
+
+### 3. board-density
+
+- 검색·필터 toolbar와 5개 컬럼의 정보 위계 개선
+- 카드 정보를 이름·단계·직무·지원일·액션 순서로 정리
+- 상세 액션과 단계 이동 form의 인터랙션 분리 유지
+- 보드 가로 스크롤과 필터 결과 count 계약 유지
+- 연결 요구사항: FR-01, FR-02, FR-05, FR-11
+
+### 4. detail-feedback-redesign
+
+- native dialog 기반 우측 상세 패널의 정보 구조 개선
+- loading, error, empty, pending, success, failure 상태의 시각 표현 개선
+- 기존 `role="status"`, `role="alert"`, focus 복귀 계약 유지
+- toast, modal, focus-trap 라이브러리 추가 금지
+- 연결 요구사항: FR-06, FR-07, FR-11
+
+## 제외 범위
+
+다음은 현재 리디자인 branch에서 구현하거나 별도 branch로 만들지 않는다.
+
+- applicant table view
+- 관리자 상태 정정
+- 역할·권한 관리
+- 채용 분석 dashboard
+- 단계 변경 확인 dialog
+- Undo
+- 서버 pagination
+- 일괄 작업
+- drag and drop
+- 새로운 제품 기능
+- 현재 scope와 무관한 refactoring
+
+위 항목은 향후 PRD와 수용 기준이 별도로 승인될 때만 다시 계획한다.
+
+기존 checkout에 위 기능과 관련된 미커밋 변경이 있더라도 이를 수정·삭제·복사하지 않는다.
+
+## Scope 작업 절차
+
+각 scope를 시작하기 전에 반드시 다음을 먼저 보고해라.
+
+1. 현재 scope 이름
+2. 연결 요구사항 ID
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 코드에서 재사용할 구조
+5. 최소 구현 방식
+6. 자동 검증 시나리오
+7. 수동 브라우저 검증 시나리오
+8. 명시적으로 제외할 범위
+
+이 보고와 사용자 승인을 받기 전에는 코드를 수정하지 마라.
+
+구현 후에는 다음을 실제 실행하고 결과를 보고해라.
+
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `git diff --check`
+
+그다음 다음 항목을 보고하고 사용자 검증을 기다려라.
+
+- unstaged diff
+- 변경 파일
+- 충족한 수용 기준
+- 수동 확인 항목
+- 알려진 제한
+- 기각하거나 다시 작성한 AI 제안과 이유
+
+사용자 검증 전에는 다음을 하지 마라.
+
+- `PROMPTS.md` 기록
+- staging
+- commit
+
+사용자 검증 이후에는 프로젝트 지침에 따라 다음 순서로 진행한다.
+
+1. `prompt-record` 실행
+2. 현재 scope의 `PROMPTS.md` section 포함
+3. 기록 변경에 필요한 검증 실행
+4. 현재 scope 파일만 stage
+5. staged diff 보고
+6. 명시적인 commit 지시 대기
+
+## 이번 요청의 종료 지점
+
+이번 요청에서는 다음까지만 진행한다.
+
+1. 기존 checkout과 미커밋 변경을 읽기 전용으로 확인
+2. dirty 변경을 건드리지 않고 committed `main` 기준으로 `ui-redesign` worktree와 branch 생성
+3. 새 worktree의 branch, HEAD, clean 상태 확인
+4. baseline lint, test, build, diff check 실행
+5. 첫 scope인 `design-foundation`의 작업 전 보고
+
+조건을 충족하더라도 리디자인 코드는 아직 작성하지 마라.
+
+`design-foundation` 작업 전 보고를 제시한 뒤 사용자 승인을 기다려라.
+````
+
+### 프롬프트 2 — prompt-record 로그 조회 예외 승인
+
+```text
+`prompt-record` 로그 조회 예외를 승인한다. 현재 대화에 보이는 실제 사용자 프롬프트를 원문 그대로 사용해 `[design-foundation]` 기록을 작성해라.
+```
+
+### AI 출력 요지
+
+- dirty 상태인 기존 checkout을 수정하지 않고 committed `main` 기준의 `ui-redesign` worktree를 생성·검증했다.
+- `src/index.css`에는 현재 화면이 소비하는 토큰만 정의하고, `src/App.module.css`에서 해당 토큰으로 기존 스타일을 정리했다.
+- native `button`, `input`, `select`에 공통 hover, focus-visible, disabled 표현을 적용하면서 JSX와 기존 동작 계약은 변경하지 않았다.
+- 새 의존성이나 범용 컴포넌트 없이 자동 검증, 브라우저 검증, 읽기 전용 diff 리뷰를 수행했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- 변경 파일은 `src/index.css`, `src/App.module.css` 두 개로 제한했고, 정의한 토큰은 모두 실제 스타일에서 사용했다.
+- native control과 기존 CSS Modules 구조를 재사용해 semantic HTML, 키보드 접근, pending·disabled 처리, dialog focus 복귀 로직을 보존했다.
+- 모든 버튼을 primary 색으로 만드는 제안은 이후 `board-density`에서 정의할 액션 위계와 충돌하므로 기각하고 neutral foundation 상태만 정리했다.
+- 외부 UI 라이브러리, CSS-in-JS, 새 상태 저장소, toast, 범용 UI 컴포넌트 추상화는 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 21개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 70개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 브라우저 및 사용자 검증
+
+- 1440px, 1024px, 768px에서 body 수평 overflow가 없고 보드 내부 가로 스크롤이 유지되는지 확인했다.
+- keyboard focus-visible, hover, disabled 표현과 native 상세 dialog 종료 후 트리거로 focus가 복귀하는 동작을 확인했다.
+- 브라우저 console warning·error가 없음을 확인했다.
+- 대비 계산 결과 본문/표면 16.27:1, 보조 텍스트/표면 6.43:1, 보조 텍스트/disabled 표면 5.46:1, focus/표면 5.17:1이었다.
+- 사용자 확인: 키보드 focus, hover, disabled 표현, 768px 보드 스크롤, 상세 focus 복귀 항목을 확인 완료했다고 보고했다.
+- 제한: forced-colors 전용 수동 검증은 수행하지 않았다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- committed `main`의 `507373052025e04cc8eecefe8b4b2bb373d611aa`와 현재 두 CSS 파일의 diff를 검토했고 blocker, major, minor 지적은 없었다.
+- JSX, 동작 로직, dependency, lockfile, 다른 feature scope가 변경되지 않았음을 확인했다.
+
+### 연결 커밋
+
+- 메시지:
+
+  ```text
+  feat(design-foundation): 채용 보드의 시각 토큰과 기본 컨트롤 정리
+
+  - 실제 사용하는 색상·간격·타이포·radius·border·shadow 토큰 정의
+  - native button, input, select의 hover·focus-visible·disabled 상태 개선
+  - 기존 semantic HTML과 focus·pending 계약 및 보드 내부 스크롤 유지
+  ```
+
+- 해시: `36aedb8`
+
+## [stage-visual-language] 채용 단계별 시각 언어 적용
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-01, FR-02, FR-11.
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 컬럼 accent, 인원수 badge, 카드 단계 tag에서 일관되게 구분한다.
+- 단계명 텍스트를 유지하고 기존 `STAGES` 순서·라벨과 `getAllowedNextStages` 전이 정책을 재사용한다.
+- design-foundation의 실제 사용 토큰과 native control 상태, 보드 가로 스크롤, 필터 count, 상세 열기, 단계 이동, pending·rollback 동작을 보존한다.
+- 새 UI·색상 라이브러리, 범용 컴포넌트·theme 추상화, 동작 로직 및 TanStack Query cache 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+ui-redesign 브랜치 최신화 및 main pull 받은 후, AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. feat(design-foundation) 커밋과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 stage-visual-language 하나뿐이며 branch는 feat/stage-visual-language여야 한다.
+
+연결 요구사항은 FR-01, FR-02, FR-11이다.
+
+완료 기준:
+
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 시각적으로 구분한다.
+- 각 컬럼 accent, 컬럼 인원수 badge, 카드의 현재 단계 tag에 같은 단계 시각 언어를 적용한다.
+- 색상만으로 상태를 전달하지 않고 기존 단계 텍스트를 유지한다.
+- 기존 STAGES 순서·라벨과 getAllowedNextStages 전이 정책을 재사용한다.
+- design-foundation에서 만든 실제 사용 토큰과 native control 상태를 보존한다.
+- 기존 보드 가로 스크롤, 필터 count, 카드 상세 열기, 단계 이동, pending·rollback 동작을 유지한다.
+
+최소 구현 원칙:
+
+- 새 UI 라이브러리나 색상 라이브러리를 추가하지 않는다.
+- 단계별 JavaScript 색상 객체를 새로 만들기보다 기존 stage code를 data attribute 또는 최소 class hook으로 노출하고 CSS Modules에서 표현하는 방식을 우선 검토한다.
+- 단계 색은 이 화면에서 실제 사용하는 값만 둔다.
+- 범용 Badge, Tag, Column 컴포넌트나 theme abstraction을 만들지 않는다.
+- 동작 로직과 TanStack Query cache 흐름은 수정하지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: 기존 단계 코드가 컬럼·count·현재 단계 tag의 CSS hook으로 재사용되도록 최소 마크업 보완
+- src/App.module.css: 단계별 accent, count badge, 단계 tag 스타일
+- src/App.test.tsx: 단계 텍스트와 기존 상호작용 계약의 필요한 회귀 보호만 추가
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- toolbar와 카드 전체 레이아웃 재설계
+- 상세 dialog 및 loading/error/empty/feedback 상태 재설계
+- 확인 dialog 재설계
+- 새 제품 기능, drag and drop, Undo, 관리자 상태 정정
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast
+- 관련 없는 refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 STAGES와 CSS 토큰을 재사용하는 방식
+5. 단계별 스타일을 연결할 최소 마크업·CSS 방식
+6. 자동 검증 시나리오
+7. 수동 브라우저 검증 시나리오와 대비 확인 방법
+8. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 구현 및 자동 검증 승인
+
+````text
+stage-visual-language 작업 전 보고를 승인한다.
+
+보고한 파일과 최소 방식으로 이 scope만 구현해라. 테스트가 필요한 동작·마크업 계약은 먼저 현재 상태에서 실패하는지 확인하고 최소 수정해라.
+
+구현 후 실제로 다음을 실행해라.
+
+- 관련 focused test
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+그다음 unstaged diff, 변경 파일, 충족한 수용 기준, 실제 명령 결과, 수동 브라우저 검증 시나리오, 알려진 제한, 기각하거나 다시 작성한 AI 제안과 이유를 보고하고 기다려라.
+
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는 PROMPTS.md 기록, staging, commit을 진행하지 마라.
+````
+
+### 프롬프트 3 — 브라우저 검증 피드백
+
+````text
+esc 닫기 안 됨. 또한 보드 영역 가로폭이 너무 좁은 것 같아 확인 필요
+````
+
+### 프롬프트 4 — 수동 검증 완료 및 읽기 전용 리뷰
+
+````text
+변경사항 포함하여 모두 수동 브라우저 검증 완료.
+
+현재 feat/stage-visual-language 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-01, FR-02, FR-11이며 scope는 stage-visual-language 하나다.
+
+우선순위:
+
+1. 다섯 단계가 컬럼 accent, count badge, 카드 단계 tag에서 일관되게 구분되는가
+2. 단계명 텍스트가 남아 있어 색상만으로 상태를 전달하지 않는가
+3. STAGES와 기존 전이 정책을 재사용하고 단계 라벨·색상용 데이터를 중복하지 않는가
+4. 대비, focus-visible, disabled, pending 상태가 약화되지 않았는가
+5. 보드 가로 스크롤과 필터 결과 count가 유지되는가
+6. 동작 로직이나 다른 redesign scope가 섞이지 않았는가
+7. 불필요한 컴포넌트·토큰·의존성·추상화가 없는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- 기존 `STAGES`의 stage code를 컬럼 `data-stage`로 노출하고 CSS Modules의 화면 한정 custom property로 컬럼 accent, count badge, 카드 단계 tag를 연결했다.
+- 단계명 텍스트와 기존 전이·TanStack Query cache 흐름을 유지하고 새 의존성, JavaScript 색상 객체, 범용 컴포넌트·theme 추상화를 추가하지 않았다.
+- 실제 브라우저 피드백에 따라 상세 dialog의 Escape 종료를 dialog 내부 native 이벤트 처리로 보완하고, 넓은 화면의 보드 사용 폭을 기존 내부 가로 스크롤을 유지하는 범위에서 조정했다.
+- 기존 단계 이동, pending·rollback, 필터 count, focus-visible·disabled 계약을 회귀 테스트와 전체 자동 검증으로 확인했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 기존 stage code를 `data-stage`에 재사용하고 count·tag class hook 및 dialog-local Escape 처리만 추가했다.
+- `src/App.module.css`는 다섯 단계가 실제 사용하는 accent·background·text 값과 badge·tag 스타일만 추가하고 shell 최대 폭을 `90rem`으로 조정했다.
+- `src/App.test.tsx`는 단계 순서·텍스트·시각 hook과 Escape 종료·focus 복귀 계약을 보호했다.
+- 단계별 JavaScript 색상 map, 전역 단계 token, 범용 Badge·Tag·Column 컴포넌트, 외부 라이브러리는 필요하지 않아 기각했다.
+- 무제한 shell 폭은 넓은 화면에서 과도하게 늘어날 수 있어 기각하고 `90rem` 상한을 사용했다. 전역 keydown listener 대신 dialog-local native 이벤트 흐름을 사용했다.
+- `onCancel`만으로는 실제 브라우저에서 Escape 종료가 되지 않는 것을 재현해 dialog-local `onKeyDown` 처리를 함께 적용했다.
+
+#### 2. 자동 검증
+
+- TDD RED: 단계별 시각 hook 테스트 2개가 기존 마크업에서 실패하는 것을 먼저 확인했다.
+- 피드백 반영 RED: 실제 Escape keydown 테스트가 기존 구현에서 dialog를 닫지 못하는 것을 확인했다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 23개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 76개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 브라우저 및 사용자 검증
+
+- 1440px에서 보드 사용 폭을 약 1361px까지 확보했고, 1024px·768px에서는 body overflow 없이 보드 내부 가로 스크롤이 유지되는 것을 확인했다.
+- 상세 dialog에서 Escape 종료 후 원래 상세 열기 버튼으로 focus가 복귀하고 브라우저 console error가 없음을 확인했다.
+- 단계 accent와 표면 대비는 5.02:1–7.58:1, 단계 텍스트와 배경 대비는 6.81:1–9.45:1로 확인했다.
+- 사용자 확인: 변경사항을 포함한 모든 수동 브라우저 검증을 완료했다고 보고했다.
+- 제한: forced-colors 모드와 실제 screen reader announcement는 별도로 검증하지 않았다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-01, FR-02, FR-11과 지정 우선순위로 미커밋 diff를 검토했고 blocker, major, minor 지적은 없었다.
+- 단계 텍스트, `STAGES`와 전이 정책 재사용, focus-visible·disabled·pending, 보드 내부 스크롤, 필터 count 계약이 유지됨을 확인했다.
+- 동작 로직, TanStack Query cache 흐름, 다른 redesign scope, dependency 및 불필요한 추상화가 섞이지 않았음을 확인했다.
+
+### 연결 커밋
+
+- 메시지:
+
+  ```text
+  feat(stage-visual-language): 채용 단계별 시각 언어 적용
+
+  - STAGES 코드를 컬럼·count badge·카드 단계 tag의 CSS hook으로 재사용
+  - 다섯 단계의 일관된 accent와 대비 가능한 badge·tag 스타일 적용
+  - 상세 Escape 종료·focus 복귀와 반응형 보드 가로 스크롤 계약 보호
+  ```
+
+- 해시: `07ce188`
+
+## [board-density] 보드 정보 위계와 카드 밀도 개선
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-01, FR-02, FR-05, FR-11.
+- 검색 input, 직무 filter, 초기화 button, 결과 맥락의 시각적 위계를 개선한다.
+- 다섯 컬럼의 header, count, 카드 목록 간격을 정리하고 카드 정보를 이름, 현재 단계, 직무, 지원일, 액션 순서로 표시한다.
+- 상세 열기 button과 단계 이동 form을 별도 인터랙션으로 유지한다.
+- 기존 단계별 시각 언어, design-foundation 토큰, 검색·직무 AND 조건, 초기화, 결과 count, 보드 내부 가로 스크롤을 유지한다.
+- 새 라이브러리, 범용 UI 컴포넌트, query·mutation·전이 정책 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. feat(design-foundation), feat(stage-visual-language) 커밋과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 board-density 하나뿐이며 branch는 feat/board-density여야 한다.
+
+연결 요구사항은 FR-01, FR-02, FR-05, FR-11이다.
+
+완료 기준:
+
+- 검색 input, 직무 filter, 초기화 button, 결과 맥락의 시각적 위계를 개선한다.
+- 다섯 컬럼의 header, count, 카드 목록 간격과 스캔 가능성을 개선한다.
+- 카드 정보 순서를 이름, 현재 단계, 직무, 지원일, 액션 영역으로 명확히 정리한다.
+- 상세 열기 button과 단계 이동 form은 중첩하지 않고 별도 인터랙션으로 유지한다.
+- 기존 단계별 시각 언어와 design-foundation 토큰을 재사용한다.
+- 검색·직무 AND 조건, 필터 초기화, 결과 count, 보드 내부 가로 스크롤을 유지한다.
+- 768px을 포함한 좁은 viewport에서도 페이지 전체가 아닌 보드 영역만 가로 스크롤된다.
+
+최소 구현 원칙:
+
+- 현재 단일 화면 구조에서 필요한 JSX 그룹과 CSS class만 추가한다.
+- 범용 Card, Toolbar, Stack, Button 컴포넌트로 추상화하지 않는다.
+- 새 레이아웃·아이콘·날짜 라이브러리를 추가하지 않는다.
+- 검색 selector, Query cache, mutation, 전이 정책을 수정하지 않는다.
+- 카드 action을 하나의 큰 button으로 합치거나 button 안에 form을 넣지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: toolbar 결과 맥락과 카드 정보·action 영역을 위한 최소 semantic grouping 및 정보 순서 조정
+- src/App.module.css: toolbar, column, card, metadata, action 영역의 간격·위계·반응형 표현
+- src/App.test.tsx: 정보 표시와 상세 button·이동 form 분리 및 기존 필터/scroll 계약의 필요한 회귀 보호
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- 단계 색상 체계 재설계
+- 상세 dialog와 상태·feedback 재설계
+- 확인 dialog 재설계
+- 테이블 view, pagination, 정렬 UI, 일괄 작업, drag and drop, Undo
+- 검색 debounce, useDeferredValue, 가상화
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast
+- 관련 없는 component 분리·refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 마크업과 CSS 토큰·단계 시각 언어를 재사용하는 방식
+5. toolbar, column, card의 최소 정보 위계 변경
+6. 상세 button과 이동 form 분리 보존 방법
+7. 자동 검증 시나리오
+8. 1440px, 1024px, 768px 수동 브라우저 검증 시나리오
+9. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 사용자 검증 완료 및 읽기 전용 diff 리뷰
+
+````text
+확인 및 검증 완료.&#x20;
+
+현재 feat/board-density 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-01, FR-02, FR-05, FR-11이며 scope는 board-density 하나다.
+
+우선순위:
+
+1. toolbar와 5개 컬럼의 정보 위계가 실제로 개선되는가
+2. 카드 정보가 이름, 단계, 직무, 지원일, 액션 순서로 읽히는가
+3. 상세 열기 button과 이동 form이 중첩되거나 하나의 click target으로 합쳐지지 않았는가
+4. 검색·직무 AND 조건, 초기화, 결과 count가 유지되는가
+5. 좁은 viewport에서 body가 아니라 boardViewport가 가로 스크롤되는가
+6. 단계별 시각 언어, focus-visible, disabled, pending 표현이 유지되는가
+7. query·mutation·전이 정책 등 동작 범위가 불필요하게 수정되지 않았는가
+8. 불필요한 component abstraction, dependency, responsive framework가 없는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- 현재 `ui-redesign`의 clean HEAD에서 `feat/board-density` branch를 생성하고 scope를 세 파일로 제한했다.
+- 기존 toolbar form 안에 필터 컨트롤과 전체·필터 결과 맥락을 분리하고, 카드 마크업을 이름, 현재 단계, 직무, 지원일, 액션 순서로 재배치했다.
+- 상세 열기 button과 단계 이동 form을 독립 sibling으로 유지하고, 기존 stage code·화면 토큰으로 컬럼·카드·액션 위계와 좁은 viewport 표현을 조정했다.
+- selector, Query cache, mutation, 전이 정책과 dependency는 변경하지 않고 관련 통합 테스트로 기존 계약을 회귀 보호했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 toolbar의 filter/result grouping과 카드 metadata/action grouping만 추가했다.
+- `src/App.module.css`는 기존 토큰과 컬럼의 `--stage-*` 변수를 재사용해 toolbar, column header, card list, metadata, action과 `48rem` 이하 표현만 조정했다.
+- `src/App.test.tsx`는 결과 count와 카드 정보 순서, 상세 button·이동 form의 sibling 구조를 보호하는 통합 테스트 2개를 추가했다.
+- 새 범용 Card·Toolbar·Stack·Button 컴포넌트, 새 dependency·responsive framework·전역 token, 검색 최적화와 동작 로직 변경은 필요하지 않아 추가하지 않았다.
+
+#### 2. 자동 검증
+
+- TDD RED: 기존 마크업에서 toolbar 결과 요약 부재와 카드 정보 순서 때문에 새 테스트 2개가 실패하는 것을 확인했다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 25개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 78개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 사용자 검증
+
+- 사용자는 변경사항 확인 및 검증을 완료했다고 보고했다.
+- 이 기록은 사용자가 별도 세부 결과를 제공하지 않은 screen reader 안내 순서와 forced-colors 모드를 검증했다고 주장하지 않는다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-01, FR-02, FR-05, FR-11과 지정 우선순위로 unstaged diff를 검토했고 blocker, major, minor 지적은 없었다.
+- toolbar·다섯 컬럼의 위계, 카드 정보 순서, 상세 button·이동 form 분리, AND 필터·초기화·결과 count, boardViewport 내부 스크롤 CSS 계약을 확인했다.
+- 기존 단계 시각 언어, focus-visible, disabled, pending 표현이 유지되고 query·mutation·전이 정책, dependency와 범용 abstraction 변경이 없음을 확인했다.
+- 리뷰 후 focused 25개 테스트와 lint를 다시 실행해 통과를 확인했다.
+
+### 연결 커밋
+
+- 메시지:
+
+  ```text
+  feat(board-density): 보드 정보 위계와 카드 밀도 개선
+
+  - 검색·직무 필터와 전체·필터 결과 count의 toolbar 위계 정리
+
+  - 카드 정보를 이름·단계·직무·지원일·독립 action 순서로 재배치
+
+  - 기존 단계 시각 언어와 보드 내부 스크롤·상호작용 계약 회귀 보호
+  ```
+
+- 해시: `c615bfd`
+
+## [detail-feedback-redesign] 상세 패널과 상태 피드백 위계 개선
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-06, FR-07, FR-11.
+- native dialog 기반 우측 상세 패널을 핵심 지원자 정보, 연락처, 경력·기술, 메모로 구분한다.
+- loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태를 문구와 시각 표현으로 구분한다.
+- 단계 이동 pending·success는 `role="status"`, failure는 `role="alert"`를 유지하면서 시각적으로 구분한다.
+- 상세 dialog의 Esc·닫기, trigger focus 복귀, 검색·필터·보드 scroll 맥락을 유지한다.
+- failure의 rollback 안내와 success·failure의 분리된 상태 소유권을 유지한다.
+- 새 library, 범용 상태 abstraction, query·mutation·rollback·pending guard·전이 정책 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. 앞선 세 redesign commit과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 detail-feedback-redesign 하나뿐이며 branch는 feat/detail-feedback-redesign이어야 한다.
+
+연결 요구사항은 FR-06, FR-07, FR-11이다.
+
+완료 기준:
+
+- native dialog 기반 우측 상세 패널의 제목, 핵심 지원자 정보, 연락처, 경력·기술·메모 위계를 개선한다.
+- loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태를 시각적으로 명확히 구분한다.
+- 단계 이동 pending, success, failure 메시지를 기존 role="status"와 role="alert" 계약을 유지하면서 구분한다.
+- 상세 dialog의 Esc·닫기와 trigger focus 복귀, 검색·필터·보드 scroll 맥락을 유지한다.
+- 기존 design tokens, stage visual language, board density 스타일을 재사용한다.
+- 실패 메시지는 rollback 사실을 계속 전달하며 다른 지원자의 성공 메시지가 실패를 즉시 덮지 않는 기존 상태 소유권을 유지한다.
+
+최소 구현 원칙:
+
+- native dialog와 현재 local state를 유지한다.
+- 필요한 semantic grouping과 CSS class만 추가하고 modal, focus-trap, toast, icon library를 추가하지 않는다.
+- 상태별 새 컴포넌트 계층이나 범용 Alert/Panel abstraction을 만들지 않는다.
+- query, mutation, entity rollback, pending guard, 전이 정책을 수정하지 않는다.
+- StageChangeConfirmationDialog의 동작과 디자인은 이번 scope에서 변경하지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: 상세 정보와 상태·feedback 표현을 위한 최소 semantic grouping과 CSS class 연결
+- src/App.module.css: 상세 panel 정보 위계, loading/error/empty, pending/success/failure 스타일
+- src/App.test.tsx: role, 상태 문구, dialog focus·scroll 맥락의 필요한 회귀 보호
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- StageChangeConfirmationDialog 재설계
+- 단계 이동 로직, rollback, pending guard 변경
+- toolbar·카드·단계 색상 체계 재설계
+- toast, modal/focus-trap library, 전역 상태
+- skeleton library 또는 범용 상태 컴포넌트
+- 새 제품 기능, Undo, 관리자 상태 정정
+- 관련 없는 refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 native dialog, role, focus·scroll 복귀 계약을 재사용하는 방식
+5. 상세 정보와 네 종류 query 상태 및 세 종류 move feedback의 최소 시각 구조
+6. 자동 검증 시나리오
+7. 키보드·강제 성공·강제 실패를 포함한 수동 브라우저 검증 시나리오
+8. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 구현 및 자동 검증 승인
+
+````text
+detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)을 확인했고, 승인한다.
+
+보고한 파일과 최소 방식으로 이 scope만 구현해라. role, dialog focus, 상태 분기처럼 동작 계약이 있는 변경은 관련 테스트를 먼저 현재 상태에서 실패시키고 최소 수정해라.
+
+구현 후 실제로 다음을 실행해라.
+
+- 관련 focused test
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+그다음 unstaged diff, 변경 파일, 충족한 수용 기준, 실제 명령 결과, 수동 브라우저 검증 시나리오, 알려진 제한, 기각하거나 다시 작성한 AI 제안과 이유를 보고하고 기다려라.
+
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는 PROMPTS.md 기록, staging, commit을 진행하지 마라.
+````
+
+### 프롬프트 3 — 수동 검증 완료 및 읽기 전용 diff 리뷰
+
+````text
+수동 브라우저 검증 완료.&#x20;
+
+현재 feat/detail-feedback-redesign 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-06, FR-07, FR-11이며 scope는 detail-feedback-redesign 하나다.
+
+우선순위:
+
+1. 우측 상세 panel의 정보 위계가 개선되면서 모든 기존 상세 필드가 유지되는가
+2. native dialog, aria-labelledby, Esc·닫기, trigger focus 복귀가 유지되는가
+3. 상세 열고 닫기 뒤 검색·필터·보드 scroll 맥락이 유지되는가
+4. loading, 조회 오류, 전체 빈 상태, 검색 결과 빈 상태가 문구와 시각 표현 모두 구분되는가
+5. pending·success는 role="status", failure는 role="alert" 계약을 유지하는가
+6. failure가 rollback 사실을 전달하고 다른 성공 메시지에 즉시 지워지지 않는가
+7. 확인 dialog나 이동 상태 로직이 scope 밖에서 변경되지 않았는가
+8. toast, modal library, global state, 범용 상태 abstraction이 추가되지 않았는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- `bed5bdb`의 clean `ui-redesign`에서 `feat/detail-feedback-redesign` branch를 생성하고 구현 범위를 `src/App.tsx`, `src/App.module.css`, `src/App.test.tsx`로 제한했다.
+- 상세 dialog에 기존 stage code를 연결하고 정보를 핵심 지원자 정보, 연락처, 경력·기술, 메모의 명명된 영역으로 재구성했다.
+- 네 query 상태와 단계 이동 pending·success·failure에 기존 단계 시각 언어를 재사용한 CSS variant를 적용했다.
+- native dialog의 Esc·닫기·focus 복귀, 검색·필터·보드 scroll 복원과 분리된 success·failure 상태 소유권은 유지하고, 확인 dialog와 이동 로직은 변경하지 않았다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 상세 정보의 semantic grouping, query 상태 heading·region, feedback class 연결만 변경했다.
+- `src/App.module.css`는 기존 화면 token과 단계 색상값을 재사용해 상세 panel, 네 query 상태, 세 feedback 상태를 구분하고 30rem 이하 상세 목록을 한 열로 바꿨다.
+- `src/App.test.tsx`는 상세 필드·영역, 상태별 role·문구·class, pending·success·failure와 failure 뒤 success 공존 계약을 보호했다.
+- `src/index.css`, `StageChangeConfirmationDialog`, query·mutation hook, rollback, pending guard, 전이 정책, dependency는 변경하지 않았다.
+- 범용 Alert/Panel 컴포넌트, toast·modal·focus-trap·icon·skeleton library, 전역 상태와 새 전역 token은 필요하지 않아 추가하지 않았다.
+
+#### 2. 테스트 우선 구현 및 자동 검증
+
+- TDD RED에서 상세 `data-stage`·명명된 영역, feedback variant class, query 상태 heading·region 부재로 신규 assertion이 실패하는 것을 확인했다. 같은 실행에서 기존 영속성 테스트 1개가 timeout됐지만 GREEN focused 재실행에서는 재현되지 않았다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 25개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 78개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 사용자 검증
+
+- 사용자는 수동 브라우저 검증을 완료했다고 보고했다.
+- 이 기록은 사용자가 별도 세부 결과를 제공하지 않은 실제 screen reader 안내 순서와 forced-colors 모드를 검증했다고 주장하지 않는다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-06, FR-07, FR-11과 지정 우선순위로 unstaged diff를 검토했고 blocker, major, minor 지적은 없었다.
+- 모든 기존 상세 필드, native dialog·`aria-labelledby`·Esc·닫기·focus 복귀, 검색·필터·보드 scroll 복원 계약을 코드와 테스트에서 확인했다.
+- 네 query 상태의 문구·semantic role·시각 variant와 pending·success의 `role="status"`, failure의 `role="alert"` 및 rollback 문구를 확인했다.
+- failure와 success의 분리 상태, 확인 dialog·이동 상태 로직 불변, 새 dependency·전역 상태·범용 상태 abstraction 부재를 확인했다.
+- 리뷰 후 focused 25개 테스트, lint, `git diff --check`를 다시 실행해 통과를 확인했다.
+
+### 연결 커밋
+
+- 메시지:
+
+  ```text
+  feat(detail-feedback-redesign): 상세 패널과 상태 피드백 위계 개선
+
+  - 상세 정보를 핵심 지원자 정보·연락처·경력·기술·메모 영역으로 구분
+  - query 네 상태와 이동 pending·success·failure 시각 표현 구분
+  - native dialog focus·scroll 복귀와 live region·rollback 상태 소유권 보호
+  ```
+
+- 해시: `36c9bcf`
