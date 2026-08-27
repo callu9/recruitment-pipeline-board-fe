@@ -97,7 +97,20 @@ function ApplicantDetailDialog({ applicant, onClose }: { applicant: Applicant; o
   }, [onClose])
 
   return (
-    <dialog ref={dialogRef} className={styles.detailDialog} aria-labelledby={titleId}>
+    <dialog
+      ref={dialogRef}
+      className={styles.detailDialog}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault()
+        dialogRef.current?.close()
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        event.preventDefault()
+        dialogRef.current?.close()
+      }}
+    >
       <header className={styles.detailHeader}>
         <h2 id={titleId}>{applicant.name} 상세 정보</h2>
         <button type="button" onClick={() => dialogRef.current?.close()}>닫기</button>
@@ -221,10 +234,10 @@ function App() {
           <div className={styles.board}>
             {STAGES.map((stage, index) => (
               /* StageColumn: 단계 제목, 현재 결과 수, 소속 지원자 카드 목록을 렌더링한다. */
-              <section key={stage.code} className={styles.column} aria-labelledby={`stage-${index}`}>
+              <section key={stage.code} className={styles.column} data-stage={stage.code} aria-labelledby={`stage-${index}`}>
                 <div className={styles.columnHeader}>
                   <h2 id={`stage-${index}`}>{stage.label}</h2>
-                  <span>{applicantsByStage[stage.code].length}명</span>
+                  <span className={styles.stageCount}>{applicantsByStage[stage.code].length}명</span>
                 </div>
                 <div className={styles.cardList}>
                   {applicantsByStage[stage.code].length === 0 ? <p className={styles.columnEmpty}>이 단계에는 지원자가 없습니다.</p> : applicantsByStage[stage.code].map((applicant) => (
@@ -233,7 +246,7 @@ function App() {
                       <h3>{applicant.name}</h3>
                       <p>{applicant.role}</p>
                       <p>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
-                      <p>현재 단계: {stage.label}</p>
+                      <p className={styles.stageTag}>현재 단계: {stage.label}</p>
                       <button
                         type="button"
                         onClick={(event) => {

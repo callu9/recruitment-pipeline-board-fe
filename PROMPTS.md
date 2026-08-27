@@ -3230,3 +3230,182 @@ main
   ```
 
 - 해시: 최종 동기화 대기
+
+## [stage-visual-language] 채용 단계별 시각 언어 적용
+
+### 목표 / 수용 기준
+
+- 연결 요구사항: FR-01, FR-02, FR-11.
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 컬럼 accent, 인원수 badge, 카드 단계 tag에서 일관되게 구분한다.
+- 단계명 텍스트를 유지하고 기존 `STAGES` 순서·라벨과 `getAllowedNextStages` 전이 정책을 재사용한다.
+- design-foundation의 실제 사용 토큰과 native control 상태, 보드 가로 스크롤, 필터 count, 상세 열기, 단계 이동, pending·rollback 동작을 보존한다.
+- 새 UI·색상 라이브러리, 범용 컴포넌트·theme 추상화, 동작 로직 및 TanStack Query cache 변경은 추가하지 않는다.
+
+### 프롬프트 1 — scope와 최소 구현·검증 gate 지정
+
+````text
+ui-redesign 브랜치 최신화 및 main pull 받은 후, AGENTS.md와 다음 자료를 지정된 순서로 읽어라.
+
+1. docs/ASSIGNMENT.md
+2. docs/PRD.md
+3. docs/TECH\_SPEC.md
+4. docs/IMPLEMENTATION\_AND\_COMMIT\_PLAN.md
+5. PROMPTS.md의 현재 feature section
+6. DECISIONS.md
+7. feat(design-foundation) 커밋과 현재 App.tsx, App.module.css, index.css, 관련 테스트
+
+현재 branch와 git status를 확인해라. 이번 작업 scope는 stage-visual-language 하나뿐이며 branch는 feat/stage-visual-language여야 한다.
+
+연결 요구사항은 FR-01, FR-02, FR-11이다.
+
+완료 기준:
+
+- 서류검토, 면접, 처우협의, 최종합격, 불합격을 시각적으로 구분한다.
+- 각 컬럼 accent, 컬럼 인원수 badge, 카드의 현재 단계 tag에 같은 단계 시각 언어를 적용한다.
+- 색상만으로 상태를 전달하지 않고 기존 단계 텍스트를 유지한다.
+- 기존 STAGES 순서·라벨과 getAllowedNextStages 전이 정책을 재사용한다.
+- design-foundation에서 만든 실제 사용 토큰과 native control 상태를 보존한다.
+- 기존 보드 가로 스크롤, 필터 count, 카드 상세 열기, 단계 이동, pending·rollback 동작을 유지한다.
+
+최소 구현 원칙:
+
+- 새 UI 라이브러리나 색상 라이브러리를 추가하지 않는다.
+- 단계별 JavaScript 색상 객체를 새로 만들기보다 기존 stage code를 data attribute 또는 최소 class hook으로 노출하고 CSS Modules에서 표현하는 방식을 우선 검토한다.
+- 단계 색은 이 화면에서 실제 사용하는 값만 둔다.
+- 범용 Badge, Tag, Column 컴포넌트나 theme abstraction을 만들지 않는다.
+- 동작 로직과 TanStack Query cache 흐름은 수정하지 않는다.
+
+예상 변경 파일:
+
+- src/App.tsx: 기존 단계 코드가 컬럼·count·현재 단계 tag의 CSS hook으로 재사용되도록 최소 마크업 보완
+- src/App.module.css: 단계별 accent, count badge, 단계 tag 스타일
+- src/App.test.tsx: 단계 텍스트와 기존 상호작용 계약의 필요한 회귀 보호만 추가
+- PROMPTS.md: 사용자 검증 gate 통과 전 수정 금지
+
+명시적 제외 범위:
+
+- toolbar와 카드 전체 레이아웃 재설계
+- 상세 dialog 및 loading/error/empty/feedback 상태 재설계
+- 확인 dialog 재설계
+- 새 제품 기능, drag and drop, Undo, 관리자 상태 정정
+- 외부 UI 라이브러리, CSS-in-JS, 전역 상태, toast
+- 관련 없는 refactoring
+- 사용자 검증 전 prompt-record, staging, commit
+
+편집 전에 다음을 먼저 보고하고 사용자 승인을 기다려라.
+
+1. 현재 scope와 연결 요구사항
+2. 현재 branch, base commit, clean 여부
+3. 수정 예정 파일과 각 파일의 책임
+4. 기존 STAGES와 CSS 토큰을 재사용하는 방식
+5. 단계별 스타일을 연결할 최소 마크업·CSS 방식
+6. 자동 검증 시나리오
+7. 수동 브라우저 검증 시나리오와 대비 확인 방법
+8. 명시적으로 제외할 범위
+
+승인 전에는 파일을 수정하지 마라.
+````
+
+### 프롬프트 2 — 구현 및 자동 검증 승인
+
+````text
+stage-visual-language 작업 전 보고를 승인한다.
+
+보고한 파일과 최소 방식으로 이 scope만 구현해라. 테스트가 필요한 동작·마크업 계약은 먼저 현재 상태에서 실패하는지 확인하고 최소 수정해라.
+
+구현 후 실제로 다음을 실행해라.
+
+- 관련 focused test
+- npm run lint
+- npm run test
+- npm run build
+- git diff --check
+
+그다음 unstaged diff, 변경 파일, 충족한 수용 기준, 실제 명령 결과, 수동 브라우저 검증 시나리오, 알려진 제한, 기각하거나 다시 작성한 AI 제안과 이유를 보고하고 기다려라.
+
+사용자가 검증 결과를 보고하거나 미검증 범위를 명시적으로 수용하기 전에는 PROMPTS.md 기록, staging, commit을 진행하지 마라.
+````
+
+### 프롬프트 3 — 브라우저 검증 피드백
+
+````text
+esc 닫기 안 됨. 또한 보드 영역 가로폭이 너무 좁은 것 같아 확인 필요
+````
+
+### 프롬프트 4 — 수동 검증 완료 및 읽기 전용 리뷰
+
+````text
+변경사항 포함하여 모두 수동 브라우저 검증 완료.
+
+현재 feat/stage-visual-language 브랜치의 미커밋 diff를 읽기 전용으로 리뷰해라. 파일을 수정하지 마라.
+
+요구사항은 FR-01, FR-02, FR-11이며 scope는 stage-visual-language 하나다.
+
+우선순위:
+
+1. 다섯 단계가 컬럼 accent, count badge, 카드 단계 tag에서 일관되게 구분되는가
+2. 단계명 텍스트가 남아 있어 색상만으로 상태를 전달하지 않는가
+3. STAGES와 기존 전이 정책을 재사용하고 단계 라벨·색상용 데이터를 중복하지 않는가
+4. 대비, focus-visible, disabled, pending 상태가 약화되지 않았는가
+5. 보드 가로 스크롤과 필터 결과 count가 유지되는가
+6. 동작 로직이나 다른 redesign scope가 섞이지 않았는가
+7. 불필요한 컴포넌트·토큰·의존성·추상화가 없는가
+
+각 지적은 심각도, 파일과 위치, 재현 시나리오, 원인, 최소 수정안 형식으로 작성해라. 추측은 추측이라고 표시하고 스타일 취향만으로 지적하지 마라. 문제가 없으면 확인 범위와 미검증 범위를 분리해 보고해라.
+````
+
+### AI 출력 요지
+
+- 기존 `STAGES`의 stage code를 컬럼 `data-stage`로 노출하고 CSS Modules의 화면 한정 custom property로 컬럼 accent, count badge, 카드 단계 tag를 연결했다.
+- 단계명 텍스트와 기존 전이·TanStack Query cache 흐름을 유지하고 새 의존성, JavaScript 색상 객체, 범용 컴포넌트·theme 추상화를 추가하지 않았다.
+- 실제 브라우저 피드백에 따라 상세 dialog의 Escape 종료를 dialog 내부 native 이벤트 처리로 보완하고, 넓은 화면의 보드 사용 폭을 기존 내부 가로 스크롤을 유지하는 범위에서 조정했다.
+- 기존 단계 이동, pending·rollback, 필터 count, focus-visible·disabled 계약을 회귀 테스트와 전체 자동 검증으로 확인했다.
+
+### 리뷰 / 검증
+
+#### 1. 구현 및 범위 검토
+
+- `src/App.tsx`는 기존 stage code를 `data-stage`에 재사용하고 count·tag class hook 및 dialog-local Escape 처리만 추가했다.
+- `src/App.module.css`는 다섯 단계가 실제 사용하는 accent·background·text 값과 badge·tag 스타일만 추가하고 shell 최대 폭을 `90rem`으로 조정했다.
+- `src/App.test.tsx`는 단계 순서·텍스트·시각 hook과 Escape 종료·focus 복귀 계약을 보호했다.
+- 단계별 JavaScript 색상 map, 전역 단계 token, 범용 Badge·Tag·Column 컴포넌트, 외부 라이브러리는 필요하지 않아 기각했다.
+- 무제한 shell 폭은 넓은 화면에서 과도하게 늘어날 수 있어 기각하고 `90rem` 상한을 사용했다. 전역 keydown listener 대신 dialog-local native 이벤트 흐름을 사용했다.
+- `onCancel`만으로는 실제 브라우저에서 Escape 종료가 되지 않는 것을 재현해 dialog-local `onKeyDown` 처리를 함께 적용했다.
+
+#### 2. 자동 검증
+
+- TDD RED: 단계별 시각 hook 테스트 2개가 기존 마크업에서 실패하는 것을 먼저 확인했다.
+- 피드백 반영 RED: 실제 Escape keydown 테스트가 기존 구현에서 dialog를 닫지 못하는 것을 확인했다.
+- focused: `npm run test -- src/App.test.tsx` — 1개 파일, 23개 테스트 통과.
+- `npm run lint`: 통과.
+- `npm run test`: Vitest 8개 파일, 76개 테스트 통과.
+- `npm run build`: 통과. 기존 500kB 초과 chunk 경고는 유지됐다.
+- `git diff --check`: 통과.
+
+#### 3. 브라우저 및 사용자 검증
+
+- 1440px에서 보드 사용 폭을 약 1361px까지 확보했고, 1024px·768px에서는 body overflow 없이 보드 내부 가로 스크롤이 유지되는 것을 확인했다.
+- 상세 dialog에서 Escape 종료 후 원래 상세 열기 버튼으로 focus가 복귀하고 브라우저 console error가 없음을 확인했다.
+- 단계 accent와 표면 대비는 5.02:1–7.58:1, 단계 텍스트와 배경 대비는 6.81:1–9.45:1로 확인했다.
+- 사용자 확인: 변경사항을 포함한 모든 수동 브라우저 검증을 완료했다고 보고했다.
+- 제한: forced-colors 모드와 실제 screen reader announcement는 별도로 검증하지 않았다.
+
+#### 4. 읽기 전용 변경 리뷰
+
+- FR-01, FR-02, FR-11과 지정 우선순위로 미커밋 diff를 검토했고 blocker, major, minor 지적은 없었다.
+- 단계 텍스트, `STAGES`와 전이 정책 재사용, focus-visible·disabled·pending, 보드 내부 스크롤, 필터 count 계약이 유지됨을 확인했다.
+- 동작 로직, TanStack Query cache 흐름, 다른 redesign scope, dependency 및 불필요한 추상화가 섞이지 않았음을 확인했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(stage-visual-language): 채용 단계별 시각 언어 적용
+
+  - STAGES 코드를 컬럼·count badge·카드 단계 tag의 CSS hook으로 재사용
+  - 다섯 단계의 일관된 accent와 대비 가능한 badge·tag 스타일 적용
+  - 상세 Escape 종료·focus 복귀와 반응형 보드 가로 스크롤 계약 보호
+  ```
+
+- 해시: 최종 동기화 대기
