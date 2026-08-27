@@ -1,11 +1,11 @@
 .shell {
   margin: 0 auto;
   max-width: 72rem;
-  padding: 2rem;
+  padding: var(--space-6);
 }
 
 .header {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-5);
 }
 
 .header h1,
@@ -16,13 +16,63 @@
 .toolbar {
   display: flex;
   align-items: end;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
 }
 
-.toolbar label {
+.toolbar label,
+.moveForm label {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shell button,
+.shell input,
+.shell select {
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  background: var(--color-surface);
+}
+
+.shell button {
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.shell button:hover:not(:disabled),
+.shell input:hover:not(:disabled),
+.shell select:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-control-hover);
+}
+
+.shell button:focus-visible,
+.shell input:focus-visible,
+.shell select:focus-visible {
+  border-color: var(--color-focus);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.shell button:disabled,
+.shell input:disabled,
+.shell select:disabled {
+  color: var(--color-text-muted);
+  background: var(--color-control-disabled);
+  cursor: not-allowed;
+}
+
+.boardViewport:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: var(--space-1);
 }
 
 .boardViewport {
@@ -33,27 +83,27 @@
 .board {
   display: grid;
   grid-template-columns: repeat(5, minmax(15rem, 1fr));
-  gap: 1rem;
+  gap: var(--space-4);
   min-width: 79rem;
 }
 
 .column {
   min-height: 24rem;
-  padding: 1rem;
-  border: 1px solid #dbe3ef;
-  border-radius: 0.75rem;
-  background: #fff;
+  padding: var(--space-4);
+  border: var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .state {
   display: grid;
   align-content: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-height: 24rem;
-  padding: 1rem;
-  border: 1px solid #dbe3ef;
-  border-radius: 0.75rem;
-  background: #fff;
+  padding: var(--space-4);
+  border: var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .state p,
@@ -62,26 +112,26 @@
 }
 
 .columnEmpty {
-  color: #526070;
+  color: var(--color-text-muted);
 }
 
 .columnHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .cardList {
   display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }
 
 .card {
-  padding: 0.75rem;
-  border: 1px solid #dbe3ef;
-  border-radius: 0.5rem;
+  padding: var(--space-3);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
 .card h3,
@@ -90,18 +140,13 @@
 }
 
 .card p + p {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .moveForm {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.moveForm label {
-  display: grid;
-  gap: 0.25rem;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 :global(body):has(.detailDialog[open]),
@@ -117,22 +162,22 @@
   height: 100dvh;
   max-height: none;
   box-sizing: border-box;
-  padding: 1.5rem;
-  background: #fff;
+  padding: var(--space-5);
+  background: var(--color-surface);
   overflow-y: auto;
   border: 0;
-  box-shadow: -0.5rem 0 1.5rem rgb(23 32 51 / 20%);
+  box-shadow: var(--shadow-sheet);
 }
 
 .detailDialog::backdrop {
-  background: rgb(23 32 51 / 35%);
+  background: var(--color-backdrop);
 }
 
 .detailHeader {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .detailHeader h2 {
@@ -141,13 +186,13 @@
 
 .detailList {
   display: grid;
-  gap: 1rem;
-  margin: 1.5rem 0 0;
+  gap: var(--space-4);
+  margin: var(--space-5) 0 0;
 }
 
 .detailList div {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
 
 .detailList dt {
