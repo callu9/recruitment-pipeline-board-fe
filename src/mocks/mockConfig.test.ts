@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { DEFAULT_FAILURE_RATE, resolveFailureRate } from './mockConfig'
+import {
+  DEFAULT_APPLICANT_SEED_SIZE,
+  DEFAULT_FAILURE_RATE,
+  PERFORMANCE_APPLICANT_SEED_SIZE,
+  resolveApplicantSeedSize,
+  resolveFailureRate,
+} from './mockConfig'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -28,5 +34,26 @@ describe('resolveFailureRate', () => {
     const { shouldMockApiFail } = await import('./mockConfig')
 
     expect(shouldMockApiFail(() => 0.5)).toBe(expected)
+  })
+})
+
+describe('resolveApplicantSeedSize', () => {
+  test.each([
+    [undefined, DEFAULT_APPLICANT_SEED_SIZE],
+    ['240', DEFAULT_APPLICANT_SEED_SIZE],
+    ['1000', PERFORMANCE_APPLICANT_SEED_SIZE],
+    ['0', DEFAULT_APPLICANT_SEED_SIZE],
+    ['invalid', DEFAULT_APPLICANT_SEED_SIZE],
+  ])('normalizes %s to %s', (value, expected) => {
+    expect(resolveApplicantSeedSize(value)).toBe(expected)
+  })
+
+  test('uses VITE_APPLICANT_SEED_SIZE after reloading the module', async () => {
+    vi.stubEnv('VITE_APPLICANT_SEED_SIZE', '1000')
+    vi.resetModules()
+
+    const { getApplicantSeedSize } = await import('./mockConfig')
+
+    expect(getApplicantSeedSize()).toBe(PERFORMANCE_APPLICANT_SEED_SIZE)
   })
 })

@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import styles from './App.module.css'
 import { useApplicantsQuery } from './features/recruitment-board/api/useApplicantsQuery'
 import { useMoveApplicantStage } from './features/recruitment-board/api/useMoveApplicantStage'
@@ -152,6 +161,68 @@ function ApplicantDetailDialog({ applicant, onClose }: { applicant: Applicant; o
   )
 }
 
+interface ApplicantBoardContentProps {
+  applicantsByStage: Record<ApplicantStage, Applicant[]>
+  pendingIds: ReadonlySet<string>
+  onOpenDetail: (applicantId: string, trigger: HTMLButtonElement) => void
+  onConfirmRequest: (
+    applicantId: string,
+    targetStage: ApplicantStage,
+    trigger: HTMLButtonElement,
+  ) => void
+}
+
+const ApplicantBoardContent = memo(function ApplicantBoardContent({
+  applicantsByStage,
+  pendingIds,
+  onOpenDetail,
+  onConfirmRequest,
+}: ApplicantBoardContentProps) {
+  return (
+    <div className={styles.board}>
+      {STAGES.map((stage, index) => (
+        <section key={stage.code} className={styles.column} data-stage={stage.code} aria-labelledby={`stage-${index}`}>
+          <div className={styles.columnHeader}>
+            <h2 id={`stage-${index}`}>{stage.label}</h2>
+            <span className={styles.stageCount}>{applicantsByStage[stage.code].length}명</span>
+          </div>
+          <div className={styles.cardList}>
+            {applicantsByStage[stage.code].length === 0 ? (
+              <p className={styles.columnEmpty}>이 단계에는 지원자가 없습니다.</p>
+            ) : applicantsByStage[stage.code].map((applicant) => (
+              <article key={applicant.id} className={styles.card}>
+                <h3>{applicant.name}</h3>
+                <p className={styles.stageTag}>현재 단계: {stage.label}</p>
+                <div className={styles.cardMetadata}>
+                  <p><span>직무</span>{applicant.role}</p>
+                  <p><span>지원일</span>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
+                </div>
+                <div className={styles.cardActions}>
+                  <button
+                    type="button"
+                    onClick={(event) => onOpenDetail(applicant.id, event.currentTarget)}
+                  >
+                    {applicant.name} 상세 열기
+                  </button>
+                  {getAllowedNextStages(applicant.stage).length > 0 ? (
+                    <StageMoveForm
+                      applicant={applicant}
+                      isPending={pendingIds.has(applicant.id)}
+                      onConfirmRequest={(targetStage, trigger) =>
+                        onConfirmRequest(applicant.id, targetStage, trigger)
+                      }
+                    />
+                  ) : <p>종료된 단계입니다.</p>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+})
+
 function App() {
   const { data: applicants = [], isPending, isError, refetch } = useApplicantsQuery()
   const [nameQuery, setNameQuery] = useState('')
@@ -171,11 +242,36 @@ function App() {
   const confirmationTriggerRef = useRef<HTMLButtonElement>(null)
   const boardViewportRef = useRef<HTMLDivElement>(null)
   const detailScrollPositionRef = useRef({ left: 0, top: 0 })
-  const filteredApplicants = filterApplicants(applicants, { nameQuery, role })
-  const applicantsByStage = groupApplicantsByStage(filteredApplicants)
-  const roles = getApplicantRoles(applicants)
+  const filters = useMemo(() => ({ nameQuery, role }), [nameQuery, role])
+  const deferredFilters = useDeferredValue(filters)
+  const isFiltering = filters !== deferredFilters
+  const roles = useMemo(() => getApplicantRoles(applicants), [applicants])
+  const filteredApplicants = useMemo(
+    () => filterApplicants(applicants, deferredFilters),
+    [applicants, deferredFilters],
+  )
+  const applicantsByStage = useMemo(
+    () => groupApplicantsByStage(filteredApplicants),
+    [filteredApplicants],
+  )
   const selectedApplicant = applicants.find((applicant) => applicant.id === selectedApplicantId)
   const confirmationApplicant = applicants.find((applicant) => applicant.id === stageChangeConfirmation?.applicantId)
+
+  const openApplicantDetail = useCallback((applicantId: string, trigger: HTMLButtonElement) => {
+    const board = boardViewportRef.current
+    if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
+    detailTriggerRef.current = trigger
+    setSelectedApplicantId(applicantId)
+  }, [])
+
+  const requestStageChangeConfirmation = useCallback((
+    applicantId: string,
+    targetStage: ApplicantStage,
+    trigger: HTMLButtonElement,
+  ) => {
+    confirmationTriggerRef.current = trigger
+    setStageChangeConfirmation({ applicantId, targetStage })
+  }, [])
 
   function closeDetail() {
     setSelectedApplicantId(null)
@@ -272,54 +368,20 @@ function App() {
           <button type="button" onClick={resetFilters}>필터 초기화</button>
         </section>
       ) : (
-        <div ref={boardViewportRef} className={styles.boardViewport} role="region" aria-label="채용 단계 보드" tabIndex={0}>
-          <div className={styles.board}>
-            {STAGES.map((stage, index) => (
-              /* StageColumn: 단계 제목, 현재 결과 수, 소속 지원자 카드 목록을 렌더링한다. */
-              <section key={stage.code} className={styles.column} data-stage={stage.code} aria-labelledby={`stage-${index}`}>
-                <div className={styles.columnHeader}>
-                  <h2 id={`stage-${index}`}>{stage.label}</h2>
-                  <span className={styles.stageCount}>{applicantsByStage[stage.code].length}명</span>
-                </div>
-                <div className={styles.cardList}>
-                  {applicantsByStage[stage.code].length === 0 ? <p className={styles.columnEmpty}>이 단계에는 지원자가 없습니다.</p> : applicantsByStage[stage.code].map((applicant) => (
-                    /* ApplicantCard: 지원자의 목록 정보와 현재 단계를 표시한다. */
-                    <article key={applicant.id} className={styles.card}>
-                      <h3>{applicant.name}</h3>
-                      <p className={styles.stageTag}>현재 단계: {stage.label}</p>
-                      <div className={styles.cardMetadata}>
-                        <p><span>직무</span>{applicant.role}</p>
-                        <p><span>지원일</span>{applicant.appliedAt.slice(0, 10).replaceAll('-', '.')}</p>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            const board = boardViewportRef.current
-                            if (board) detailScrollPositionRef.current = { left: board.scrollLeft, top: board.scrollTop }
-                            detailTriggerRef.current = event.currentTarget
-                            setSelectedApplicantId(applicant.id)
-                          }}
-                        >
-                          {applicant.name} 상세 열기
-                        </button>
-                        {getAllowedNextStages(applicant.stage).length > 0 ? (
-                          <StageMoveForm
-                            applicant={applicant}
-                            isPending={pendingIds.has(applicant.id)}
-                            onConfirmRequest={(targetStage, trigger) => {
-                              confirmationTriggerRef.current = trigger
-                              setStageChangeConfirmation({ applicantId: applicant.id, targetStage })
-                            }}
-                          />
-                        ) : <p>종료된 단계입니다.</p>}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+        <div
+          ref={boardViewportRef}
+          className={styles.boardViewport}
+          role="region"
+          aria-label="채용 단계 보드"
+          aria-busy={isFiltering}
+          tabIndex={0}
+        >
+          <ApplicantBoardContent
+            applicantsByStage={applicantsByStage}
+            pendingIds={pendingIds}
+            onOpenDetail={openApplicantDetail}
+            onConfirmRequest={requestStageChangeConfirmation}
+          />
         </div>
       )}
       {selectedApplicant && <ApplicantDetailDialog applicant={selectedApplicant} onClose={closeDetail} />}

@@ -7,6 +7,7 @@ import styles from './App.module.css'
 import type { Applicant } from './features/recruitment-board/model/applicant.types'
 import { resetMockApiTestConfig, setMockApiTestConfig } from './mocks/mockConfig'
 import { STORAGE_KEY } from './mocks/mockDb'
+import { createSeedApplicants } from './mocks/seedApplicants'
 import { server } from './test/server'
 
 if (!HTMLDialogElement.prototype.showModal) {
@@ -26,7 +27,30 @@ function confirmStageChange() {
   fireEvent.click(screen.getByRole('button', { name: '확인' }))
 }
 
+test('keeps the filter control current and settles the board on the latest filter', async () => {
+  server.use(http.get('*/api/applicants', () => HttpResponse.json(createSeedApplicants(20))))
+
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>,
+  )
+
+  const board = await screen.findByRole('region', { name: '채용 단계 보드' })
+  const input = screen.getByLabelText('이름 검색')
+
+  expect(board).toHaveAttribute('aria-busy', 'false')
+  fireEvent.change(input, { target: { value: 'Alex Kim' } })
+  expect(input).toHaveValue('Alex Kim')
+
+  await waitFor(() => {
+    expect(screen.getByText('전체 20명 중 5명 표시')).toBeInTheDocument()
+    expect(board).toHaveAttribute('aria-busy', 'false')
+  })
+})
+
 test('cancelling a stage-change confirmation leaves the applicant state unchanged and restores focus', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   const applicant: Applicant = {
     id: 'applicant-confirmation', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
     stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',

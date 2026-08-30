@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { STORAGE_KEY, loadApplicants } from './mockDb'
+import type { Applicant } from '../features/recruitment-board/model/applicant.types'
+import { resetMockApiTestConfig, setMockApiTestConfig } from './mockConfig'
+import {
+  STORAGE_KEY,
+  getApplicantsStorageKey,
+  loadApplicants,
+  saveApplicants,
+  updateApplicantStage,
+} from './mockDb'
 
-const validApplicant = {
+const validApplicant: Applicant = {
   id: 'applicant-001',
   name: '지원자 001',
   role: 'Frontend Developer',
@@ -16,6 +24,7 @@ const validApplicant = {
 
 afterEach(() => {
   localStorage.clear()
+  resetMockApiTestConfig()
   vi.restoreAllMocks()
 })
 
@@ -33,6 +42,25 @@ describe('loadApplicants', () => {
 
     expect(applicants.map(({ name }) => name)).toContain('Alex Kim')
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual(applicants)
+  })
+
+  test('isolates the 1,000 applicant mode and preserves its stage updates', () => {
+    saveApplicants([{ ...validApplicant, name: 'Default mode applicant' }])
+    const defaultStorage = localStorage.getItem(STORAGE_KEY)
+
+    setMockApiTestConfig({ applicantSeedSize: 1000 })
+    const performanceApplicants = loadApplicants()
+    const performanceStorageKey = getApplicantsStorageKey()
+
+    expect(performanceStorageKey).toBe(`${STORAGE_KEY}:1000`)
+    expect(performanceApplicants).toHaveLength(1000)
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(defaultStorage)
+
+    updateApplicantStage('applicant-001', 'INTERVIEW')
+
+    expect(loadApplicants().find(({ id }) => id === 'applicant-001')?.stage).toBe('INTERVIEW')
+    expect(JSON.parse(localStorage.getItem(performanceStorageKey) ?? '[]')).toHaveLength(1000)
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(defaultStorage)
   })
 
   test.each([

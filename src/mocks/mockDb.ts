@@ -1,8 +1,17 @@
 import { APPLICANT_ROLES, type Applicant, type ApplicantStage } from '../features/recruitment-board/model/applicant.types'
 import { STAGES } from '../features/recruitment-board/model/stages'
 import { createSeedApplicants } from './seedApplicants'
+import {
+  DEFAULT_APPLICANT_SEED_SIZE,
+  getApplicantSeedSize,
+  type ApplicantSeedSize,
+} from './mockConfig'
 
 export const STORAGE_KEY = 'recruitment-pipeline-board:applicants:v1'
+
+export function getApplicantsStorageKey(size: ApplicantSeedSize = getApplicantSeedSize()) {
+  return size === DEFAULT_APPLICANT_SEED_SIZE ? STORAGE_KEY : `${STORAGE_KEY}:${size}`
+}
 
 function isApplicant(value: unknown): value is Applicant {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -24,7 +33,7 @@ function isApplicant(value: unknown): value is Applicant {
 }
 
 function readStoredApplicants(): Applicant[] | null {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = localStorage.getItem(getApplicantsStorageKey())
   if (stored === null) return null
 
   try {
@@ -36,24 +45,26 @@ function readStoredApplicants(): Applicant[] | null {
 }
 
 export function saveApplicants(applicants: Applicant[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(applicants))
+  localStorage.setItem(getApplicantsStorageKey(), JSON.stringify(applicants))
 }
 
 export function loadApplicants(): Applicant[] {
   const applicants = readStoredApplicants()
   if (applicants) return applicants
-  if (localStorage.getItem(STORAGE_KEY) !== null) console.warn('Resetting invalid applicant storage')
+  if (localStorage.getItem(getApplicantsStorageKey()) !== null) {
+    console.warn('Resetting invalid applicant storage')
+  }
   return resetApplicants()
 }
 
-export function resetApplicants(size = 240) {
+export function resetApplicants(size = getApplicantSeedSize()) {
   const applicants = createSeedApplicants(size)
   saveApplicants(applicants)
   return applicants
 }
 
 export function updateApplicantStage(applicantId: string, stage: ApplicantStage): Applicant {
-  const applicants = readStoredApplicants() ?? createSeedApplicants()
+  const applicants = readStoredApplicants() ?? createSeedApplicants(getApplicantSeedSize())
   const applicant = applicants.find(({ id }) => id === applicantId)
   if (!applicant) throw new Error(`Applicant not found: ${applicantId}`)
 
@@ -63,5 +74,5 @@ export function updateApplicantStage(applicantId: string, stage: ApplicantStage)
 }
 
 export function getApplicantSnapshot() {
-  return readStoredApplicants() ?? createSeedApplicants()
+  return readStoredApplicants() ?? createSeedApplicants(getApplicantSeedSize())
 }

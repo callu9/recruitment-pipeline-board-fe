@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { createSeedApplicants } from '../../../mocks/seedApplicants'
 import type { Applicant } from './applicant.types'
 import { filterApplicants, getApplicantRoles, groupApplicantsByStage } from './applicantSelectors'
 
@@ -61,4 +62,20 @@ test('combines name and role filters and returns each current role once', () => 
 
   expect(filterApplicants(source, { nameQuery: 'alex', role: 'Frontend Developer' })).toEqual([alexDeveloper])
   expect(getApplicantRoles(source)).toEqual(['Frontend Developer', 'Product Manager', 'Product Designer'])
+})
+
+test('filters and groups 1,000 applicants without losing or duplicating results', () => {
+  const source = createSeedApplicants(1000)
+  const filtered = filterApplicants(source, {
+    nameQuery: 'alex',
+    role: 'Backend Developer',
+  })
+  const grouped = groupApplicantsByStage(filtered)
+
+  expect(filtered.length).toBeGreaterThan(0)
+  expect(filtered.every(({ name, role }) =>
+    name.toLowerCase().includes('alex') && role === 'Backend Developer')).toBe(true)
+  expect(Object.values(grouped).flat().map(({ id }) => id).sort()).toEqual(
+    filtered.map(({ id }) => id).sort(),
+  )
 })

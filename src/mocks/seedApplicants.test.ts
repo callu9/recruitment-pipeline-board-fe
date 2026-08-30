@@ -41,4 +41,13 @@ describe('createSeedApplicants', () => {
       ]),
     )
   })
+
+  test('creates 1,000 applicants with unique IDs', () => {
+    const applicants = createSeedApplicants(1000)
+
+    expect(applicants).toHaveLength(1000)
+    expect(new Set(applicants.map(({ id }) => id))).toHaveLength(1000)
+    expect(applicants[0]).toMatchObject({ id: 'applicant-001', stage: STAGES[0].code })
+    expect(applicants[999]).toMatchObject({ id: 'applicant-1000' })
+  })
 })

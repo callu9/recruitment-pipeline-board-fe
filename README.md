@@ -9,6 +9,23 @@ npm install
 npm run dev
 ```
 
+## 1,000건 성능 모드
+
+기본 240건과 별도 localStorage를 사용하는 1,000건 모드는 다음 명령으로 실행합니다.
+
+```bash
+npm run dev:performance
+```
+
+production build에서 측정하려면 다음 순서로 실행합니다.
+
+```bash
+npm run build -- --mode performance
+npm run preview
+```
+
+기본 모드와 성능 모드의 성공한 단계 이동은 각각의 저장소에 유지됩니다.
+
 ## 검증
 
 ```bash
@@ -74,9 +91,10 @@ VITE_MOCK_FAILURE_RATE=1
 
 - [x] FR-08 동일 카드 경쟁 상태 처리
 - [x] 핵심 테스트
+- [x] FR-10 1,000건 데이터 성능
 - [x] FR-11 키보드 접근성
 
-Undo는 운영 정책상 기각했으며, 1,000건 가상 스크롤은 이번 활성 구현 범위에서 제외합니다.
+Undo는 운영 정책상 기각했습니다. 1,000건은 측정 기준을 충족해 별도 가상 스크롤을 추가하지 않았습니다.
 
 ## 배포
 
