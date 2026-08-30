@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/recruitment-pipeline-board-fe/',
   plugins: [react()],
   test: {
     environment: 'jsdom',

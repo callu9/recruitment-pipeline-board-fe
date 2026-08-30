@@ -7,7 +7,10 @@ import App from './App.tsx'
 
 const queryClient = new QueryClient()
 
-void worker.start({ onUnhandledRequest: 'bypass' }).then(() => {
+void worker.start({
+  onUnhandledRequest: 'bypass',
+  serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
+}).then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>

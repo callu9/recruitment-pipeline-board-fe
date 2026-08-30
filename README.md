@@ -80,4 +80,4 @@ Undo는 운영 정책상 기각했으며, 1,000건 가상 스크롤은 이번 �
 
 ## 배포
 
-- URL: 제출 전에 추가
+- URL: https://callu9.github.io/recruitment-pipeline-board-fe/
