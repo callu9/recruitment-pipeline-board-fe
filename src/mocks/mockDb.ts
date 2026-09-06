@@ -57,9 +57,43 @@ export function saveApplicants(applicants: Applicant[]) {
   localStorage.setItem(getApplicantsStorageKey(), JSON.stringify(applicants))
 }
 
+function hasMissingWorkspaceFields(applicant: Applicant) {
+  return applicant.owner === undefined
+    || applicant.positionId === undefined
+    || applicant.nextAction === undefined
+    || applicant.dueDate === undefined
+    || applicant.schedule === undefined
+    || applicant.evaluations === undefined
+    || applicant.notes === undefined
+    || applicant.timeline === undefined
+}
+
+function migrateWorkspaceFields(applicants: Applicant[]) {
+  const templates = createSeedApplicants(Math.max(applicants.length, getApplicantSeedSize()))
+  return applicants.map((applicant, index) => {
+    const template = templates.find(({ id }) => id === applicant.id) ?? templates[index % templates.length]
+    return {
+      ...applicant,
+      owner: applicant.owner === undefined ? template.owner : applicant.owner,
+      positionId: applicant.positionId === undefined ? template.positionId : applicant.positionId,
+      nextAction: applicant.nextAction === undefined ? template.nextAction : applicant.nextAction,
+      dueDate: applicant.dueDate === undefined ? template.dueDate : applicant.dueDate,
+      schedule: applicant.schedule === undefined ? template.schedule : applicant.schedule,
+      evaluations: applicant.evaluations === undefined ? template.evaluations : applicant.evaluations,
+      notes: applicant.notes === undefined ? template.notes : applicant.notes,
+      timeline: applicant.timeline === undefined ? template.timeline : applicant.timeline,
+    }
+  })
+}
+
 export function loadApplicants(): Applicant[] {
   const applicants = readStoredApplicants()
-  if (applicants) return applicants
+  if (applicants) {
+    if (!applicants.some(hasMissingWorkspaceFields)) return applicants
+    const migrated = migrateWorkspaceFields(applicants)
+    saveApplicants(migrated)
+    return migrated
+  }
   if (localStorage.getItem(getApplicantsStorageKey()) !== null) {
     console.warn('Resetting invalid applicant storage')
   }
@@ -73,7 +107,10 @@ export function resetApplicants(size = getApplicantSeedSize()) {
 }
 
 export function updateApplicantStage(applicantId: string, stage: ApplicantStage): Applicant {
-  const applicants = readStoredApplicants() ?? createSeedApplicants(getApplicantSeedSize())
+  const storedApplicants = readStoredApplicants()
+  const applicants = storedApplicants
+    ? (storedApplicants.some(hasMissingWorkspaceFields) ? migrateWorkspaceFields(storedApplicants) : storedApplicants)
+    : createSeedApplicants(getApplicantSeedSize())
   const applicant = applicants.find(({ id }) => id === applicantId)
   if (!applicant) throw new Error(`Applicant not found: ${applicantId}`)
 

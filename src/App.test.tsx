@@ -8,6 +8,7 @@ import { createSeedApplicants, SEED_POSITIONS } from './mocks/seedApplicants'
 import { server } from './test/server'
 
 if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function showModal() { this.open = true }
+if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function close() { this.open = false; this.dispatchEvent(new Event('close')) }
 
 const renderApp = (applicants = createSeedApplicants(12)) => {
   server.use(
@@ -54,6 +55,9 @@ test('opens the context-preserving detail panel and restores trigger focus', asy
 
   expect(screen.getByRole('complementary', { name: '김민지 상세 정보' })).toBeInTheDocument()
   expect(screen.getByText('타임라인')).toBeInTheDocument()
+  const detail = screen.getByRole('complementary', { name: '김민지 상세 정보' })
+  expect(within(detail).getByText('Frontend Engineer')).toBeInTheDocument()
+  expect(within(detail).queryByText('position-frontend')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '상세 패널 닫기' }))
   expect(document.activeElement).toBe(trigger)
 })
@@ -84,6 +88,25 @@ test('requires confirmation only for terminal stage moves', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('최종합격')
 })
 
+test('restores the originating stage button focus after terminal cancel and Escape', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
+  server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...applicant, stage: 'HIRED' })))
+  renderApp([applicant])
+  const form = await screen.findByRole('form', { name: '김민지 단계 변경' })
+  const actionButton = within(form).getByRole('button', { name: '적용' })
+
+  fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'HIRED' } })
+  fireEvent.submit(form)
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '취소' }))
+  expect(document.activeElement).toBe(actionButton)
+
+  fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'HIRED' } })
+  fireEvent.submit(form)
+  fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }))
+  expect(document.activeElement).toBe(actionButton)
+})
+
 test('exposes Today, Calendar, and Positions operations views', async () => {
   renderApp(createSeedApplicants(12))
   await screen.findByRole('table', { name: '지원자 목록' })
@@ -91,6 +114,9 @@ test('exposes Today, Calendar, and Positions operations views', async () => {
   fireEvent.click(screen.getByRole('button', { name: /Today/ }))
   expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument()
   expect(screen.getByText('평가 작성 필요')).toBeInTheDocument()
+  expect(screen.getAllByRole('button', { name: '상세 보기' }).length).toBeGreaterThan(0)
+  expect(screen.queryByRole('button', { name: '평가 열기' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '일정 등록' })).not.toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('button', { name: /Calendar/ }))
   expect(screen.getByRole('heading', { name: 'Calendar' })).toBeInTheDocument()

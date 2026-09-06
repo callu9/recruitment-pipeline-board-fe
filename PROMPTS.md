@@ -3759,8 +3759,8 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 #### 자동 검증
 
 - `npm run lint` — 통과.
-- `npm run test -- --run` — 9개 파일, 74개 테스트 통과.
-- `npm run test -- --run src/App.test.tsx` — 통과, 8개 테스트.
+- `npm run test -- --run` — 9개 파일, 77개 테스트 통과.
+- `npm run test -- --run src/App.test.tsx` — 통과, 9개 테스트.
 - `npm run build` — 통과. Vite의 기존 대형 chunk 경고만 남았다.
 - `git diff --check` — 통과.
 
@@ -3776,6 +3776,17 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 - 날짜는 안정적인 mock Today를 위해 `WORKSPACE_TODAY=2026-09-07`로 고정했다. 운영 timezone/서버 시계 연동, 외부 calendar/email/ERP, 1,000건 virtualization은 이 scope에 포함하지 않았다.
 - seed data가 이미 localStorage에 있으면 새 optional workspace fields가 없는 기존 저장 데이터를 그대로 읽을 수 있으므로, 새 필드는 seed가 새로 생성될 때 완전하게 제공된다.
 - AI 제안 중 toast/전역 store/새 dependency/Undo/drag-and-drop은 요구 범위와 안전성에 맞지 않아 채택하지 않았다. 반복된 select/move UI를 별도 범용 abstraction으로 만들자는 방향도 최소 diff 원칙에 따라 재작성했다.
+
+### Post-review 리뷰 / 수정
+
+- Calendar의 `new Date(...).toISOString()`가 Asia/Seoul에서 local midnight를 전날 UTC 날짜로 바꾸어 Sep 6–12 주를 만들고 Sep 13 이벤트를 누락시키는 원인을 확인했다. local Date 구성요소 포맷 helper와 회귀 테스트로 `2026-09-07`–`2026-09-13`을 고정했다.
+- `isApplicant`가 legacy v1의 optional workspace 필드 누락을 valid로 통과시키고 그대로 반환하던 원인을 확인했다. seed ID/index 기반 deterministic backfill을 추가하고 기존 applicant stage/base data와 이미 저장된 optional 값은 보존한다.
+- terminal confirmation의 close/unmount 경로가 originating submit button을 기억하지 않아 cancel/Escape 후 body에 focus가 남던 원인을 확인했다. trigger를 confirmation state에 저장하고 cancel/Escape/unmount에서 한 번만 복귀하도록 했으며, 확인 후 move semantics는 유지했다.
+- Today의 평가/후속/일정 action은 모두 같은 상세 panel open 동작인데 서로 다른 mutation을 암시했다. 모두 `상세 보기`로 재라벨링했고, detail panel은 positions Query의 title을 표시하며 raw position ID fallback을 제거했다.
+- RED → GREEN focused 확인: `src/App.test.tsx` 9개, `workspaceSelectors.test.ts` 4개, `mockDb.test.ts` 14개 테스트 통과.
+- fix 검증: `npm run lint`, `npm run test -- --run`(9개 파일/77개), `npm run build`, `git diff --check` 모두 통과했다. Build는 기존 500kB 초과 chunk warning만 출력했다.
+- 데스크톱 Orca에서 Calendar가 `2026.09.07`부터 `2026.09.13`까지 7일을 표시하고 Sep 13 event를 포함하는 것을 확인했으며, Positions retry 후 6행과 detail panel의 `Frontend Engineer` title을 확인했다.
+- iPhone 12 emulation에서 Applicants/Today/Calendar/Positions를 재확인했다. body width는 390으로 유지되고 table/calendar 내부 overflow만 존재했으며, Today action은 모두 `상세 보기`였다. Console에는 Vite/MSW informational logs와 forced 503→retry 기록만 있고 JavaScript error는 없었다.
 
 ### 연결 커밋
 

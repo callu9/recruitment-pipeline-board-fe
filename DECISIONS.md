@@ -117,3 +117,18 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 
 - seed 날짜는 제품의 시간대·서버 시계 연동이 아니므로 운영 캘린더의 timezone 정책은 후속 범위다.
 - 현재 mock은 240명의 전체 행을 렌더링하며 별도 virtualization을 추가하지 않았다. 실제 1,000건 병목이 측정될 때만 최적화한다.
+
+## D-012. workspace post-review fixes
+
+### 결정
+
+- Calendar 주간 날짜는 `toISOString()`으로 표시하지 않고 local `Date` 구성요소로 포맷해 `WORKSPACE_TODAY`부터 7일을 포함한다. 날짜-only mock 값은 UTC 변환 대상이 아니다.
+- valid legacy v1 applicants는 기존 필수 데이터와 stage를 보존한 채 seed ID/index에 대응하는 workspace 필드만 backfill하고 localStorage에 다시 저장한다. 이미 값이 있는 optional 필드(특히 `schedule: null`, 빈 배열)는 덮어쓰지 않는다.
+- terminal confirmation은 submit origin button을 기억하고 cancel/Escape/unmount 시 그 button으로 focus를 복원한다. 확인 후에는 optimistic move 흐름을 그대로 유지한다.
+- Today 큐의 모든 action은 실제 동작인 상세 panel 열기를 표시하도록 `상세 보기`로 통일한다. 별도 평가/일정 mutation은 범위 밖이다.
+- 상세 panel의 포지션은 ID가 아니라 positions Query 결과의 title로 표시하며, 매칭되지 않은 ID는 raw ID를 노출하지 않고 `미지정`으로 표시한다.
+
+### 검증
+
+- post-review RED 테스트에서 UTC 주간 drift, legacy workspace field 누락, terminal focus 손실, misleading Today labels, raw position ID를 각각 재현했다.
+- 각 수정은 기존 Query cache source, pending guard, entity-only rollback, terminal-only confirmation 계약을 변경하지 않았다.

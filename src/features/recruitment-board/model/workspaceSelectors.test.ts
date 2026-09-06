@@ -7,8 +7,15 @@ import {
   getStageCounts,
   getTodayInterviews,
   getUnscheduledApplicants,
+  getWorkspaceWeekDays,
   WORKSPACE_TODAY,
 } from './workspaceSelectors'
+
+test('builds the local workspace week through Sunday without UTC date drift', () => {
+  expect(getWorkspaceWeekDays(WORKSPACE_TODAY)).toEqual([
+    '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13',
+  ])
+})
 
 test('filters workspace rows by owner, stage, schedule, and overdue status', () => {
   const applicants = createSeedApplicants(30)
