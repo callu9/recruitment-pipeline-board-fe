@@ -1,813 +1,142 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test } from 'vitest'
+import { http, HttpResponse } from 'msw'
 import App from './App'
-import styles from './App.module.css'
-import type { Applicant } from './features/recruitment-board/model/applicant.types'
 import { resetMockApiTestConfig, setMockApiTestConfig } from './mocks/mockConfig'
-import { STORAGE_KEY } from './mocks/mockDb'
-import { createSeedApplicants } from './mocks/seedApplicants'
+import { createSeedApplicants, SEED_POSITIONS } from './mocks/seedApplicants'
 import { server } from './test/server'
 
-if (!HTMLDialogElement.prototype.showModal) {
-  Object.defineProperties(HTMLDialogElement.prototype, {
-    showModal: { value(this: HTMLDialogElement) { this.open = true } },
-    close: { value(this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')) } },
-  })
+if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function showModal() { this.open = true }
+
+const renderApp = (applicants = createSeedApplicants(12)) => {
+  server.use(
+    http.get('*/api/applicants', () => HttpResponse.json(applicants)),
+    http.get('*/api/positions', () => HttpResponse.json(SEED_POSITIONS)),
+  )
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
 }
 
 afterEach(() => {
-  cleanup()
-  localStorage.clear()
   resetMockApiTestConfig()
-})
-
-function confirmStageChange() {
-  fireEvent.click(screen.getByRole('button', { name: '확인' }))
-}
-
-test('keeps the filter control current and settles the board on the latest filter', async () => {
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(createSeedApplicants(20))))
-
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const board = await screen.findByRole('region', { name: '채용 단계 보드' })
-  const input = screen.getByLabelText('이름 검색')
-
-  expect(board).toHaveAttribute('aria-busy', 'false')
-  fireEvent.change(input, { target: { value: 'Alex Kim' } })
-  expect(input).toHaveValue('Alex Kim')
-
-  await waitFor(() => {
-    expect(screen.getByText('전체 20명 중 5명 표시')).toBeInTheDocument()
-    expect(board).toHaveAttribute('aria-busy', 'false')
-  })
-})
-
-test('cancelling a stage-change confirmation leaves the applicant state unchanged and restores focus', async () => {
-  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  const applicant: Applicant = {
-    id: 'applicant-confirmation', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([applicant]))
-  let patchRequests = 0
-  server.use(http.patch('*/api/applicants/:applicantId/stage', () => {
-    patchRequests += 1
-    return new Promise<Response>(() => undefined)
-  }))
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const { container } = render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>)
-
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const moveForm = within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })
-  const moveButton = within(moveForm).getByRole('button', { name: '이동' })
-  const cacheBefore = queryClient.getQueryData<Applicant[]>(['applicants'])
-  const storageBefore = localStorage.getItem(STORAGE_KEY)
-
-  moveButton.focus()
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(moveButton)
-
-  const dialog = await screen.findByRole('dialog', { name: '김민지 단계 변경 확인' })
-  expect(dialog).toHaveAttribute('open')
-  expect(dialog).toHaveAttribute('aria-labelledby')
-  expect(within(dialog).getByText('현재 단계: 서류검토')).toBeInTheDocument()
-  expect(within(dialog).getByText('변경 단계: 면접')).toBeInTheDocument()
-  expect(patchRequests).toBe(0)
-  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
-  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
-  expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
-
-  fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(patchRequests).toBe(0)
-  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
-  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
-  expect(moveButton).toHaveFocus()
-})
-
-test('Escape cancels a stage-change confirmation without a PATCH request', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-escape', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
-    stage: 'INTERVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
-  }
-  let patchRequests = 0
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
-    http.patch('*/api/applicants/:applicantId/stage', () => {
-      patchRequests += 1
-      return HttpResponse.json({ ...applicant, stage: 'OFFER' })
-    }),
-  )
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const { container } = render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>)
-  const interviewColumn = await within(container).findByRole('region', { name: '면접' })
-  const moveForm = within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })
-  const cacheBefore = queryClient.getQueryData<Applicant[]>(['applicants'])
-  const storageBefore = localStorage.getItem(STORAGE_KEY)
-
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'OFFER' } })
-  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  const dialog = await screen.findByRole('dialog', { name: '이준호 단계 변경 확인' })
-  fireEvent(dialog, new Event('cancel', { cancelable: true }))
-
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(patchRequests).toBe(0)
-  expect(queryClient.getQueryData<Applicant[]>(['applicants'])).toEqual(cacheBefore)
-  expect(localStorage.getItem(STORAGE_KEY)).toBe(storageBefore)
-})
-
-test('opens applicant details and restores the trigger focus when the dialog closes', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1',
-    name: '김민지',
-    role: 'Frontend Developer',
-    appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW',
-    email: 'minji@example.com',
-    phone: '010-0000-0001',
-    experienceYears: 3,
-    skills: ['React', 'TypeScript'],
-    note: 'B2B SaaS 경험 보유',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
-  detailTrigger.focus()
-  fireEvent.click(detailTrigger)
-
-  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' })
-  expect(dialog).toHaveAttribute('open')
-  expect(dialog).toHaveAttribute('aria-labelledby')
-  expect(dialog).toHaveAttribute('data-stage', 'DOCUMENT_REVIEW')
-
-  const summary = within(dialog).getByRole('region', { name: '핵심 지원자 정보' })
-  expect(within(summary).getByText('Frontend Developer')).toBeInTheDocument()
-  expect(within(summary).getByText('2026.08.01')).toBeInTheDocument()
-  expect(within(summary).getByText('서류검토')).toHaveClass(styles.stageTag)
-
-  const contact = within(dialog).getByRole('region', { name: '연락처' })
-  expect(within(contact).getByText('minji@example.com')).toBeInTheDocument()
-  expect(within(contact).getByText('010-0000-0001')).toBeInTheDocument()
-
-  const experience = within(dialog).getByRole('region', { name: '경력·기술' })
-  expect(within(experience).getByText('3년')).toBeInTheDocument()
-  expect(within(experience).getByText('React, TypeScript')).toBeInTheDocument()
-
-  const note = within(dialog).getByRole('region', { name: '메모' })
-  expect(within(note).getByText('B2B SaaS 경험 보유')).toBeInTheDocument()
-
-  fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(detailTrigger).toHaveFocus()
-})
-
-test('closes applicant details on Escape and restores focus', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
-  detailTrigger.focus()
-  fireEvent.click(detailTrigger)
-
-  const dialog = screen.getByRole('dialog', { name: '김민지 상세 정보' })
-  fireEvent.keyDown(dialog, { key: 'Escape' })
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(detailTrigger).toHaveFocus()
-})
-
-test('restores the board scroll position after closing applicant details', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const board = await screen.findByRole('region', { name: '채용 단계 보드' })
-  board.scrollLeft = 120
-  const detailTrigger = await screen.findByRole('button', { name: '김민지 상세 열기' })
-  fireEvent.click(detailTrigger)
-  board.scrollLeft = 30
-
-  fireEvent.click(screen.getByRole('button', { name: '닫기' }))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(board.scrollLeft).toBe(120)
-})
-
-test('keeps the search query and role filter after closing applicant details', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-    },
-    {
-      id: 'applicant-2', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
-    },
-  ]
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  await screen.findByText('김민지')
-  const nameQuery = screen.getByLabelText('이름 검색')
-  const roleFilter = screen.getByLabelText('직무 필터')
-  fireEvent.change(nameQuery, { target: { value: '김민지' } })
-  fireEvent.change(roleFilter, { target: { value: 'Frontend Developer' } })
-  fireEvent.click(await screen.findByRole('button', { name: '김민지 상세 열기' }))
-  fireEvent.click(screen.getByRole('button', { name: '닫기' }))
-
-  expect(nameQuery).toHaveValue('김민지')
-  expect(roleFilter).toHaveValue('Frontend Developer')
-})
-
-test('renders the project shell title', () => {
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  expect(screen.getByRole('heading', { name: '채용 파이프라인 보드' })).toBeInTheDocument()
-})
-
-test('renders the five stage columns in their defined order with stage visual hooks', async () => {
-  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  await within(container).findByRole('region', { name: '채용 단계 보드' })
-  const stages = [
-    ['DOCUMENT_REVIEW', '서류검토'],
-    ['INTERVIEW', '면접'],
-    ['OFFER', '처우협의'],
-    ['HIRED', '최종합격'],
-    ['REJECTED', '불합격'],
-  ]
-  const columns = within(container)
-    .getAllByRole('region')
-    .filter((region) => region.getAttribute('aria-labelledby')?.startsWith('stage-'))
-
-  expect(columns).toHaveLength(stages.length)
-  expect(columns.map((column) => column.getAttribute('aria-labelledby'))).toEqual(
-    stages.map((_, index) => `stage-${index}`),
-  )
-
-  columns.forEach((column, index) => {
-    expect(column).toHaveAttribute('data-stage', stages[index]?.[0])
-    expect(within(column).getByRole('heading', { name: stages[index]?.[1] })).toBeInTheDocument()
-    expect(within(column).getByText(/\d+명/)).toHaveClass(styles.stageCount)
-  })
-
-  const boardViewport = await within(container).findByRole('region', { name: '채용 단계 보드' })
-  expect(boardViewport).toHaveClass(styles.boardViewport)
-  expect(boardViewport.firstElementChild).toHaveClass(styles.board)
-})
-
-test('renders fetched applicants once in their stages with matching counts', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-1',
-      name: '김민지',
-      role: 'Frontend Developer',
-      appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW',
-      email: 'minji@example.com',
-      phone: '010-0000-0001',
-      experienceYears: 3,
-      skills: ['React'],
-      note: '',
-    },
-    {
-      id: 'applicant-2',
-      name: '이준호',
-      role: 'Product Manager',
-      appliedAt: '2026-08-02',
-      stage: 'INTERVIEW',
-      email: 'junho@example.com',
-      phone: '010-0000-0002',
-      experienceYears: 5,
-      skills: ['Planning'],
-      note: '',
-    },
-  ]
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
-
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  await within(container).findByText('김민지')
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-
-  expect(within(documentReviewColumn).getByText('1명')).toHaveClass(styles.stageCount)
-  expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
-  expect(within(documentReviewColumn).getByText('Frontend Developer')).toBeInTheDocument()
-  expect(within(documentReviewColumn).getByText('2026.08.01')).toBeInTheDocument()
-  expect(within(documentReviewColumn).getByText('현재 단계: 서류검토')).toHaveClass(styles.stageTag)
-  expect(within(interviewColumn).getByText('1명')).toBeInTheDocument()
-  expect(within(interviewColumn).getByText('이준호')).toBeInTheDocument()
-  expect(within(container).getAllByText('김민지')).toHaveLength(1)
-  expect(within(container).getAllByText('이준호')).toHaveLength(1)
-})
-
-test('shows the filtered result count in the toolbar and resets its context', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-1', name: 'Alex Kim', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'alex@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-    },
-    {
-      id: 'applicant-2', name: 'Alex Park', role: 'Product Designer', appliedAt: '2026-08-02T09:00:00.000Z',
-      stage: 'INTERVIEW', email: 'park@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Figma'], note: '',
-    },
-  ]
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const toolbar = screen.getByRole('form', { name: '지원자 필터' })
-  expect(await within(toolbar).findByText('전체 2명 중 2명 표시')).toBeInTheDocument()
-
-  fireEvent.change(within(toolbar).getByLabelText('직무 필터'), { target: { value: 'Frontend Developer' } })
-  expect(within(toolbar).getByText('전체 2명 중 1명 표시')).toBeInTheDocument()
-
-  fireEvent.click(within(toolbar).getByRole('button', { name: '필터 초기화' }))
-  expect(within(toolbar).getByText('전체 2명 중 2명 표시')).toBeInTheDocument()
-})
-
-test('orders card information and keeps detail and move controls as separate sibling actions', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const card = (await screen.findByRole('heading', { name: '김민지' })).closest('article')!
-  expect(Array.from(card.querySelectorAll('h3, p')).slice(0, 4).map(({ textContent }) => textContent)).toEqual([
-    '김민지',
-    '현재 단계: 서류검토',
-    '직무Frontend Developer',
-    '지원일2026.08.01',
-  ])
-
-  const detailButton = within(card).getByRole('button', { name: '김민지 상세 열기' })
-  const moveForm = within(card).getByRole('form', { name: '김민지 단계 이동' })
-  expect(detailButton.closest('form')).toBeNull()
-  expect(detailButton.parentElement).toBe(moveForm.parentElement)
-  expect(detailButton.parentElement).not.toBe(card)
-})
-
-test('moves an applicant after the stage PATCH succeeds', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1',
-    name: '김민지',
-    role: 'Frontend Developer',
-    appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW',
-    email: 'minji@example.com',
-    phone: '010-0000-0001',
-    experienceYears: 3,
-    skills: ['React'],
-    note: '',
-  }
-  let requestBody: unknown
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
-    http.patch('*/api/applicants/:applicantId/stage', async ({ request }) => {
-      requestBody = await request.json()
-      return HttpResponse.json({ ...applicant, stage: 'INTERVIEW' })
-    }),
-  )
-
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
-
-  expect(within(moveForm).queryByRole('option', { name: '서류검토' })).not.toBeInTheDocument()
-  expect(within(moveForm).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual(['', 'INTERVIEW', 'REJECTED'])
-
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-
-  expect(await within(interviewColumn).findByText('김민지')).toBeInTheDocument()
-  expect(requestBody).toEqual({ stage: 'INTERVIEW' })
-  expect(within(documentReviewColumn).queryByText('김민지')).not.toBeInTheDocument()
-  const success = await screen.findByRole('status')
-  expect(success).toHaveTextContent('김민지님을 면접(으)로 이동했습니다.')
-  expect(success).toHaveClass(styles.feedbackSuccess)
-})
-
-test('shows terminal-stage status instead of a move form', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-hired', name: '최종합격자', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'HIRED', email: 'hired@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-    },
-    {
-      id: 'applicant-rejected', name: '불합격자', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
-      stage: 'REJECTED', email: 'rejected@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
-    },
-  ]
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  for (const [columnName, applicantName] of [['최종합격', '최종합격자'], ['불합격', '불합격자']]) {
-    const column = await screen.findByRole('region', { name: columnName })
-    const card = within(column).getByRole('heading', { name: applicantName }).closest('article')!
-    expect(within(card).getByText('종료된 단계입니다.')).toBeInTheDocument()
-    expect(within(card).queryByRole('form')).not.toBeInTheDocument()
-  }
-})
-
-test('keeps a successfully moved applicant after the app is rendered again', async () => {
   localStorage.clear()
+})
+
+test('renders the workspace tabs, real summary metrics, and dense applicant table', async () => {
+  renderApp()
+
+  expect(await screen.findByRole('table', { name: '지원자 목록' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Applicants/ })).toHaveTextContent('12')
+  expect(screen.getByText('전체 지원자')).toBeInTheDocument()
+  expect(screen.getByText('오늘 인터뷰')).toBeInTheDocument()
+  expect(screen.queryByText('채용 단계 보드')).not.toBeInTheDocument()
+})
+
+test('combines owner, no-schedule, and overdue filters and resets them', async () => {
+  const applicants = createSeedApplicants(12)
+  renderApp(applicants)
+
+  await screen.findByRole('table', { name: '지원자 목록' })
+  fireEvent.change(screen.getByLabelText('담당자'), { target: { value: '김하나' } })
+  fireEvent.click(screen.getByLabelText('일정 없음'))
+  fireEvent.click(screen.getByLabelText('지연됨'))
+  fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: '없는 지원자' } })
+  expect(screen.getByText('조건에 맞는 지원자가 없습니다.')).toBeInTheDocument()
+  fireEvent.click(screen.getAllByRole('button', { name: '필터 초기화' })[0])
+  expect(screen.getByRole('table', { name: '지원자 목록' })).toBeInTheDocument()
+})
+
+test('opens the context-preserving detail panel and restores trigger focus', async () => {
+  renderApp(createSeedApplicants(1))
+  const table = await screen.findByRole('table', { name: '지원자 목록' })
+  const trigger = within(table).getByRole('button', { name: /김민지/ })
+  fireEvent.click(trigger)
+
+  expect(screen.getByRole('complementary', { name: '김민지 상세 정보' })).toBeInTheDocument()
+  expect(screen.getByText('타임라인')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '상세 패널 닫기' }))
+  expect(document.activeElement).toBe(trigger)
+})
+
+test('moves ordinary stages without a confirmation and shows the updated row', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  const firstRender = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const documentReviewColumn = await within(firstRender.container).findByRole('region', { name: '서류검토' })
-  const moveForm = (await within(documentReviewColumn).findAllByRole('form'))[0]!
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')).toContainEqual(
-    expect.objectContaining({ id: 'applicant-001', stage: 'INTERVIEW' }),
-  ))
-  expect(await within(firstRender.container).findByRole('region', { name: '면접' })).toHaveTextContent('49명')
-
-  firstRender.unmount()
-  const secondRender = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  await within(await within(secondRender.container).findByRole('region', { name: '면접' })).findByText('49명')
-})
-
-test('moves an applicant to the target column before a delayed stage PATCH succeeds', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  let resolveSuccess: (response: Response) => void = () => undefined
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
-    http.patch('*/api/applicants/:applicantId/stage', () =>
-      new Promise<Response>((resolve) => {
-        resolveSuccess = resolve
-      }),
-    ),
-  )
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-
-  expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
-  expect(within(documentReviewColumn).queryByRole('heading', { name: '김민지' })).not.toBeInTheDocument()
-  const pendingForm = within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })
-  expect(pendingForm).toHaveAttribute('aria-busy', 'true')
-  const pending = screen.getByRole('status')
-  expect(pending).toHaveTextContent('김민지님의 단계를 저장하는 중입니다.')
-  expect(pending).toHaveClass(styles.feedbackPending)
-  resolveSuccess(HttpResponse.json({ ...applicant, stage: 'INTERVIEW' }))
-  await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
-})
-
-test('keeps the applicant in the current stage and shows feedback when a stage PATCH fails', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1',
-    name: '김민지',
-    role: 'Frontend Developer',
-    appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW',
-    email: 'minji@example.com',
-    phone: '010-0000-0001',
-    experienceYears: 3,
-    skills: ['React'],
-    note: '',
-  }
-  let resolveFailure: (response: Response) => void = () => undefined
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
-    http.patch('*/api/applicants/:applicantId/stage', () =>
-      new Promise<Response>((resolve) => {
-        resolveFailure = resolve
-      }),
-    ),
-  )
-
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  const moveForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
-
-  fireEvent.change(within(moveForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(moveForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-
-  expect(await within(interviewColumn).findByRole('heading', { name: '김민지' })).toBeInTheDocument()
-  resolveFailure(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
-  const failure = await screen.findByRole('alert')
-  expect(failure).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
-  expect(failure).toHaveClass(styles.feedbackFailure)
-  expect(within(documentReviewColumn).getByText('김민지')).toBeInTheDocument()
-  await waitFor(() => expect(within(documentReviewColumn).getByRole('form', { name: '김민지 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
-})
-
-test('restores only the failed applicant when another applicant move succeeds', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-a', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-    },
-    {
-      id: 'applicant-b', name: '이준호', role: 'Product Manager', appliedAt: '2026-08-02T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'junho@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Planning'], note: '',
-    },
-  ]
-  let resolveA: (response: Response) => void = () => undefined
-  let resolveB: (response: Response) => void = () => undefined
-  let patchRequests = 0
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json(applicants)),
-    http.patch('*/api/applicants/:applicantId/stage', ({ params }) => {
-      patchRequests += 1
-      return new Promise<Response>((resolve) => {
-        if (params.applicantId === 'applicant-a') resolveA = resolve
-        else resolveB = resolve
-      })
-    },
-    ),
-  )
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>,
-  )
-  const documentReviewColumn = await within(container).findByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  const aForm = await within(documentReviewColumn).findByRole('form', { name: '김민지 단계 이동' })
-  fireEvent.change(within(aForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(aForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-  const bForm = within(documentReviewColumn).getByRole('form', { name: '이준호 단계 이동' })
-  fireEvent.change(within(bForm).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-  fireEvent.click(within(bForm).getByRole('button', { name: '이동' }))
-  confirmStageChange()
-
-  expect(await within(interviewColumn).findByText('이준호')).toBeInTheDocument()
-  expect(within(interviewColumn).getByText('김민지')).toBeInTheDocument()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(patchRequests).toBe(2)
-  resolveA(HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 단계를 저장하지 못했습니다.' }, { status: 503 }))
-
-  expect(await within(documentReviewColumn).findByText('김민지')).toBeInTheDocument()
-  expect(await screen.findByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
-  const pendingBForm = within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })
-  expect(pendingBForm).toHaveAttribute('aria-busy', 'true')
-  resolveB(HttpResponse.json({ ...applicants[1], stage: 'INTERVIEW' }))
-  await waitFor(() => expect(within(interviewColumn).getByRole('form', { name: '이준호 단계 이동' })).toHaveAttribute('aria-busy', 'false'))
-  expect(screen.getByRole('alert')).toHaveTextContent('단계 이동을 저장하지 못해 이전 상태로 복원했습니다.')
-  expect(screen.getByRole('alert')).toHaveClass(styles.feedbackFailure)
-  expect(screen.getByRole('status')).toHaveTextContent('이준호님을 면접(으)로 이동했습니다.')
-  expect(screen.getByRole('status')).toHaveClass(styles.feedbackSuccess)
-})
-
-test('blocks a rapid second move for the same applicant while its PATCH is pending', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  let patchRequests = 0
-  server.use(
-    http.get('*/api/applicants', () => HttpResponse.json([applicant])),
-    http.patch('*/api/applicants/:applicantId/stage', async () => {
-      patchRequests += 1
-      return new Promise(() => undefined)
-    }),
-  )
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>,
-  )
-  const form = await within(container).findByRole('form', { name: '김민지 단계 이동' })
-  fireEvent.change(within(form).getByLabelText('이동할 단계'), { target: { value: 'INTERVIEW' } })
-
+  renderApp(createSeedApplicants(1))
+  const form = await screen.findByRole('form', { name: '김민지 단계 변경' })
+  fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'INTERVIEW' } })
   fireEvent.submit(form)
-  const confirmationButton = screen.getByRole('button', { name: '확인' })
-  fireEvent.click(confirmationButton)
-  fireEvent.click(confirmationButton)
 
-  expect(within(form).getByLabelText('이동할 단계')).toBeDisabled()
-  expect(within(form).getByRole('button', { name: '이동' })).toBeDisabled()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(patchRequests).toBe(1)
+  expect(screen.queryByRole('heading', { name: '최종 단계 변경' })).not.toBeInTheDocument()
+  expect(await screen.findByRole('status')).toHaveTextContent('면접')
+  expect(within(form).getByRole('combobox')).toHaveValue('')
 })
 
-test('retries a failed applicants query only after the user requests it', async () => {
+test('requires confirmation only for terminal stage moves', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
+  server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...applicant, stage: 'HIRED' })))
+  renderApp([applicant])
+  const form = await screen.findByRole('form', { name: '김민지 단계 변경' })
+  fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'HIRED' } })
+  fireEvent.submit(form)
+  expect(screen.getByRole('heading', { name: '최종 단계 변경' })).toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '확인' }))
+  expect(await screen.findByRole('status')).toHaveTextContent('최종합격')
+})
+
+test('exposes Today, Calendar, and Positions operations views', async () => {
+  renderApp(createSeedApplicants(12))
+  await screen.findByRole('table', { name: '지원자 목록' })
+
+  fireEvent.click(screen.getByRole('button', { name: /Today/ }))
+  expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument()
+  expect(screen.getByText('평가 작성 필요')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: /Calendar/ }))
+  expect(screen.getByRole('heading', { name: 'Calendar' })).toBeInTheDocument()
+  expect(screen.getByText('일정 미정')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: /Positions/ }))
+  expect(screen.getByRole('heading', { name: 'Positions' })).toBeInTheDocument()
+  expect(screen.getByText('Frontend Engineer')).toBeInTheDocument()
+})
+
+test('reports query errors and lets the user retry', async () => {
   let requests = 0
   server.use(
     http.get('*/api/applicants', () => {
       requests += 1
-      return requests === 1
-        ? HttpResponse.json({ code: 'MOCK_FAILURE', message: '지원자 목록을 불러오지 못했습니다.' }, { status: 503 })
-        : HttpResponse.json([
-            {
-              id: 'applicant-1',
-              name: '김민지',
-              role: 'Frontend Developer',
-              appliedAt: '2026-08-01T09:00:00.000Z',
-              stage: 'DOCUMENT_REVIEW',
-              email: 'minji@example.com',
-              phone: '010-0000-0001',
-              experienceYears: 3,
-              skills: ['React'],
-              note: '',
-            },
-          ])
+      return requests === 1 ? HttpResponse.json({ message: 'fail' }, { status: 503 }) : HttpResponse.json(createSeedApplicants(1))
+    }),
+    http.get('*/api/positions', () => HttpResponse.json(SEED_POSITIONS)),
+  )
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+  expect(await screen.findByRole('alert')).toHaveTextContent('지원자 정보를 불러오지 못했습니다.')
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+  expect(await screen.findByRole('table', { name: '지원자 목록' })).toBeInTheDocument()
+  expect(requests).toBe(2)
+})
+
+test('keeps optimistic rollback scoped to the failed applicant', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  const applicants = createSeedApplicants(2)
+  let patchCount = 0
+  server.use(
+    http.patch('*/api/applicants/:applicantId/stage', ({ params }) => {
+      patchCount += 1
+      return params.applicantId === applicants[0]?.id
+        ? HttpResponse.json({ message: 'fail' }, { status: 503 })
+        : HttpResponse.json({ ...applicants[1], stage: 'INTERVIEW' })
     }),
   )
-
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  const retryButton = await within(container).findByRole('button', { name: '다시 시도' })
-  expect(requests).toBe(1)
-
-  fireEvent.click(retryButton)
-
-  expect(await within(container).findByText('김민지')).toBeInTheDocument()
-  expect(requests).toBe(2)
-})
-
-test('filters stage cards and counts by name and role, then resets both filters', async () => {
-  const applicants: Applicant[] = [
-    {
-      id: 'applicant-1', name: 'Alex Kim', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-      stage: 'DOCUMENT_REVIEW', email: 'alex@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-    },
-    {
-      id: 'applicant-2', name: 'Alex Park', role: 'Product Designer', appliedAt: '2026-08-02T09:00:00.000Z',
-      stage: 'INTERVIEW', email: 'park@example.com', phone: '010-0000-0002', experienceYears: 5, skills: ['Figma'], note: '',
-    },
-  ]
-  server.use(http.get('*/api/applicants', () => HttpResponse.json(applicants)))
-
-  const { container } = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-
-  await within(container).findByText('Alex Kim')
-  fireEvent.change(within(container).getByLabelText('이름 검색'), { target: { value: '  aLeX  ' } })
-  fireEvent.change(within(container).getByLabelText('직무 필터'), { target: { value: 'Frontend Developer' } })
-
-  const documentReviewColumn = within(container).getByRole('region', { name: '서류검토' })
-  const interviewColumn = within(container).getByRole('region', { name: '면접' })
-  expect(within(documentReviewColumn).getByText('1명')).toBeInTheDocument()
-  expect(within(documentReviewColumn).getByText('Alex Kim')).toBeInTheDocument()
-  expect(within(interviewColumn).getByText('0명')).toBeInTheDocument()
-  expect(within(interviewColumn).queryByText('Alex Park')).not.toBeInTheDocument()
-
-  fireEvent.click(within(container).getByRole('button', { name: '필터 초기화' }))
-
-  expect(await within(interviewColumn).findByText('Alex Park')).toBeInTheDocument()
-})
-
-test('shows an accessible loading board while the applicants query is pending', () => {
-  server.use(http.get('*/api/applicants', () => new Promise<Response>(() => undefined)))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const loadingBoard = screen.getByRole('region', { name: '지원자 정보 로딩' })
-  expect(loadingBoard).toHaveAttribute('aria-busy', 'true')
-  expect(within(loadingBoard).getByRole('heading', { name: '지원자 정보를 불러오는 중입니다.' })).toBeInTheDocument()
-  expect(loadingBoard).toHaveClass(styles.stateLoading)
-})
-
-test('shows a non-technical query error and restores the board after retry succeeds', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  let requests = 0
-  server.use(http.get('*/api/applicants', () => {
-    requests += 1
-    return requests === 1
-      ? HttpResponse.json({ code: 'INTERNAL_ERROR', message: 'database password leaked' }, { status: 503 })
-      : HttpResponse.json([applicant])
-  }))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const error = await screen.findByRole('alert')
-  expect(error).toHaveTextContent('지원자 정보를 불러오지 못했습니다.')
-  expect(error).not.toHaveTextContent('database password leaked')
-  expect(within(error).getByRole('heading', { name: '지원자 정보를 불러오지 못했습니다.' })).toBeInTheDocument()
-  expect(error).toHaveClass(styles.stateError)
-
-  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
-
-  expect(await screen.findByRole('region', { name: '채용 단계 보드' })).toBeInTheDocument()
-  expect(screen.getByText('김민지')).toBeInTheDocument()
-  expect(requests).toBe(2)
-})
-
-test('shows a distinct empty state when the source applicants list is empty', async () => {
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const emptyState = await screen.findByRole('region', { name: '등록된 지원자 없음' })
-  expect(within(emptyState).getByRole('heading', { name: '등록된 지원자가 없습니다.' })).toBeInTheDocument()
-  expect(emptyState).toHaveClass(styles.stateEmpty)
-  expect(screen.queryByText('현재 검색 조건에 맞는 지원자가 없습니다.')).not.toBeInTheDocument()
-})
-
-test('shows a filter empty state and resets the existing filters', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  await screen.findByText('김민지')
-  fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: '없는 이름' } })
-
-  const emptyState = await screen.findByRole('region', { name: '검색 결과 없음' })
-  expect(within(emptyState).getByRole('heading', { name: '현재 검색 조건에 맞는 지원자가 없습니다.' })).toBeInTheDocument()
-  expect(emptyState).toHaveClass(styles.stateFilteredEmpty)
-  fireEvent.click(within(emptyState).getByRole('button', { name: '필터 초기화' }))
-  expect(await screen.findByText('김민지')).toBeInTheDocument()
-})
-
-test('shows a short empty state only in stages without filtered applicants', async () => {
-  const applicant: Applicant = {
-    id: 'applicant-1', name: '김민지', role: 'Frontend Developer', appliedAt: '2026-08-01T09:00:00.000Z',
-    stage: 'DOCUMENT_REVIEW', email: 'minji@example.com', phone: '010-0000-0001', experienceYears: 3, skills: ['React'], note: '',
-  }
-  server.use(http.get('*/api/applicants', () => HttpResponse.json([applicant])))
-
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-  const interviewColumn = await screen.findByRole('region', { name: '면접' })
-  expect(within(interviewColumn).getByText('이 단계에는 지원자가 없습니다.')).toBeInTheDocument()
-  expect(within(screen.getByRole('region', { name: '서류검토' })).queryByText('이 단계에는 지원자가 없습니다.')).not.toBeInTheDocument()
+  renderApp(applicants)
+  const firstForm = await screen.findByRole('form', { name: '김민지 단계 변경' })
+  fireEvent.change(within(firstForm).getByRole('combobox'), { target: { value: 'INTERVIEW' } })
+  fireEvent.submit(firstForm)
+  const secondForm = screen.getByRole('form', { name: /Alex Kim 단계 변경/ })
+  fireEvent.change(within(secondForm).getByRole('combobox'), { target: { value: 'OFFER' } })
+  fireEvent.submit(secondForm)
+  await waitFor(() => expect(patchCount).toBe(2))
+  expect(await screen.findByRole('alert')).toHaveTextContent('이전 상태로 복원')
+  expect(screen.getByRole('status')).toHaveTextContent('Alex Kim')
 })

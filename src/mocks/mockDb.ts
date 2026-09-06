@@ -1,6 +1,6 @@
-import { APPLICANT_ROLES, type Applicant, type ApplicantStage } from '../features/recruitment-board/model/applicant.types'
+import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position } from '../features/recruitment-board/model/applicant.types'
 import { STAGES } from '../features/recruitment-board/model/stages'
-import { createSeedApplicants } from './seedApplicants'
+import { createSeedApplicants, SEED_POSITIONS } from './seedApplicants'
 import {
   DEFAULT_APPLICANT_SEED_SIZE,
   getApplicantSeedSize,
@@ -8,6 +8,7 @@ import {
 } from './mockConfig'
 
 export const STORAGE_KEY = 'recruitment-pipeline-board:applicants:v1'
+export const POSITIONS_STORAGE_KEY = 'recruitment-pipeline-board:positions:v1'
 
 export function getApplicantsStorageKey(size: ApplicantSeedSize = getApplicantSeedSize()) {
   return size === DEFAULT_APPLICANT_SEED_SIZE ? STORAGE_KEY : `${STORAGE_KEY}:${size}`
@@ -29,6 +30,14 @@ function isApplicant(value: unknown): value is Applicant {
     Array.isArray(applicant.skills) &&
     applicant.skills.every((skill) => typeof skill === 'string') &&
     typeof applicant.note === 'string'
+    && (applicant.owner === undefined || APPLICANT_OWNERS.includes(applicant.owner as (typeof APPLICANT_OWNERS)[number]))
+    && (applicant.positionId === undefined || typeof applicant.positionId === 'string')
+    && (applicant.nextAction === undefined || typeof applicant.nextAction === 'string')
+    && (applicant.dueDate === undefined || typeof applicant.dueDate === 'string')
+    && (applicant.schedule === undefined || applicant.schedule === null || typeof applicant.schedule === 'object')
+    && (applicant.evaluations === undefined || Array.isArray(applicant.evaluations))
+    && (applicant.notes === undefined || Array.isArray(applicant.notes))
+    && (applicant.timeline === undefined || Array.isArray(applicant.timeline))
   )
 }
 
@@ -75,4 +84,30 @@ export function updateApplicantStage(applicantId: string, stage: ApplicantStage)
 
 export function getApplicantSnapshot() {
   return readStoredApplicants() ?? createSeedApplicants(getApplicantSeedSize())
+}
+
+function isPosition(value: unknown): value is Position {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const position = value as Record<string, unknown>
+  return typeof position.id === 'string'
+    && typeof position.title === 'string'
+    && APPLICANT_ROLES.includes(position.role as Position['role'])
+    && typeof position.department === 'string'
+    && typeof position.requiredCount === 'number'
+    && typeof position.deadline === 'string'
+    && ['OPEN', 'PAUSED', 'CLOSED'].includes(position.status as string)
+}
+
+export function loadPositions(): Position[] {
+  const stored = localStorage.getItem(POSITIONS_STORAGE_KEY)
+  if (stored) {
+    try {
+      const positions: unknown = JSON.parse(stored)
+      if (Array.isArray(positions) && positions.every(isPosition)) return positions
+    } catch {
+      // Reset below when the stored mock payload is invalid.
+    }
+  }
+  localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(SEED_POSITIONS))
+  return SEED_POSITIONS
 }
