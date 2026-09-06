@@ -8,6 +8,7 @@ import {
   saveApplicants,
   updateApplicantStage,
 } from './mockDb'
+import { createSeedApplicants } from './seedApplicants'
 
 const validApplicant: Applicant = {
   id: 'applicant-001',
@@ -30,11 +31,32 @@ afterEach(() => {
 
 describe('loadApplicants', () => {
   test('preserves valid stored applicants without replacing them with seed data', () => {
-    const storedApplicants = [{ ...validApplicant, name: 'Saved Applicant', stage: 'INTERVIEW' as const }]
+    const storedApplicants = [{ ...createSeedApplicants(1)[0], name: 'Saved Applicant', stage: 'INTERVIEW' as const }]
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedApplicants))
 
     expect(loadApplicants()).toEqual(storedApplicants)
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual(storedApplicants)
+  })
+
+  test('backfills workspace fields for valid legacy records without changing applicant data', () => {
+    const legacyApplicant = { ...validApplicant, name: 'Saved Applicant', stage: 'INTERVIEW' as const }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([legacyApplicant]))
+
+    const migrated = loadApplicants()
+
+    expect(migrated).toHaveLength(1)
+    expect(migrated[0]).toMatchObject({
+      ...legacyApplicant,
+      owner: '김하나',
+      positionId: 'position-frontend',
+      nextAction: expect.any(String),
+      dueDate: expect.any(String),
+      evaluations: expect.any(Array),
+      notes: expect.any(Array),
+      timeline: expect.any(Array),
+    })
+    expect(migrated[0]?.schedule).toBeDefined()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')[0]).toMatchObject({ stage: 'INTERVIEW', name: 'Saved Applicant' })
   })
 
   test('stores mixed seed data only when storage is empty', () => {

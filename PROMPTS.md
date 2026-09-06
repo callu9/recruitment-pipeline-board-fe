@@ -3738,3 +3738,56 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
   ```
 
 - 해시: `36c9bcf`
+
+## [recruitment-workspace-ux] 채용 운영 workspace
+
+### 프롬프트 1 — 구현 요청
+
+```text
+[implementation] Own the complete [recruitment-workspace-ux] feature in the current worktree/branch feat-recruitment-workspace-ux. Read AGENTS.md and the required docs in order, then inspect the existing React/TypeScript/TanStack Query/MSW/localStorage implementation and recent commits. The user's product scope overrides docs/ASSIGNMENT.md's old Must/Should product scope, but AGENTS.md architecture constraints remain binding. Implement the requested recruitment operations workspace with five-stage applicants view transformed to a dense vertical table/list (not a 5-column horizontal board) with tabs/counts, filters (name, role, owner, stage, no schedule, overdue), reset, row selection with context-preserving right detail panel; Today view with today's interviews, missing evaluations, overdue, unscheduled and detail/actions; internal weekly Calendar with interview/evaluation/offer/start-date events, type/role/owner filters, event detail panel, unscheduled list; Positions view with required counts/deadline/status and applicant navigation; summary metrics only from real data. Extend the domain/seed/mock API/localStorage minimally for owner, next action, due date/schedule, evaluations, notes/timeline, positions and hire-transfer display; keep native Date and CSS. Replace repeated selects/move buttons with concise inline stage changes from row/detail; ordinary transitions need no confirmation, only HIRED/REJECTED confirm; preserve optimistic updates, synchronous same-applicant pending guard, concurrent different applicants, entity-only rollback, status/error feedback, keyboard access. Keep TanStack Query cache source of truth, MSW 200-800ms and ~15% failure, semantic HTML, focus restore, dialog/form labels, loading/query-error/empty/filtered-empty states, desktop and narrow viewport without five-column horizontal navigation, and enough tests for pure transforms and critical flows. No external calendar/email/ERP, no drag/drop, no Zustand/global store, no broad abstraction/new dependency, no fake placeholder metrics. Provide simple undo only if safe and genuinely low complexity; otherwise record the policy reason. Use the current scope name consistently in the PROMPTS heading and commit message. Update only the current scope's PROMPTS section during feature work, preserving prior sections/hashes and recording the actual user prompt plus evidence-based AI summary/review. Update DECISIONS.md only for important assumptions/rejected/unfinished scope. Run npm run lint, npm run test, npm run build, focused tests, git diff --check, and Orca built-in browser checks for desktop/narrow major flows plus console errors. Ensure origin/dev exists; if absent create/push dev from origin/main, then commit the feature, push feat/recruitment-workspace-ux, create a GitHub PR with base dev, and report exact PR URL/number, commit, files, tests, browser scenarios, limitations, and any rejected/re-written suggestions. This task has explicit user authorization for implementation, commit, push, PR, and independent review as the validation gate.
+```
+
+### AI 출력 요지
+
+- Applicants를 다섯 컬럼 board가 아닌 dense semantic table로 바꾸고 Applicants·Today·Calendar·Positions 탭, 실데이터 metrics, 이름/직무/담당자/포지션/단계/일정/기한 필터, reset, 선택 보존 상세 panel을 추가했다.
+- seed/domain/mock API/localStorage에 owner, next action, due date/schedule, evaluations, notes/timeline, positions를 최소 확장했다. Calendar는 내부 이벤트만 만들고 Today/Positions는 같은 Query cache 데이터로 계산한다.
+- 단계 변경은 기존 `useMoveApplicantStage`의 optimistic update, entity-only rollback, synchronous same-applicant guard, different-applicant concurrency를 유지하면서 일반 전이는 즉시 시작하고 HIRED/REJECTED만 native confirmation을 띄운다.
+- pure workspace selectors와 Applicants critical flows, mock positions endpoint를 테스트했다. Undo는 외부 상태와 안전하게 되돌릴 계약이 없어 기각했고 이 사유를 `DECISIONS.md`에 기록했다.
+
+### 리뷰 / 검증
+
+#### 자동 검증
+
+- `npm run lint` — 통과.
+- `npm run test -- --run` — 9개 파일, 77개 테스트 통과.
+- `npm run test -- --run src/App.test.tsx` — 통과, 9개 테스트.
+- `npm run build` — 통과. Vite의 기존 대형 chunk 경고만 남았다.
+- `git diff --check` — 통과.
+
+#### Orca 브라우저 검증
+
+- 데스크톱: Applicants table 240행과 4개 탭, Today 큐 4종, Calendar 주간 grid/events/unscheduled, Positions 6행, 상세 panel 열기·닫기 및 trigger focus 복귀, HIRED 확인 dialog를 확인했다.
+- 좁은 viewport: iPhone 12 emulation에서 Applicants/Today/Calendar/Positions를 확인했다. `body.scrollWidth`는 390으로 유지되고 table/calendar 내부만 각각 780/875px로 overflow되어 페이지 전체나 다섯 컬럼 board가 가로 이동하지 않는다.
+- Console: `orca console --limit 100 --json` 결과 `messages: []`.
+
+#### 검토 범위와 제한
+
+- Query cache 단일 source, MSW 200–800ms/기본 15% 실패, same-applicant guard/entity rollback, keyboard/semantic labels, loading/query-error/empty/filtered-empty states를 코드·테스트로 확인했다.
+- 날짜는 안정적인 mock Today를 위해 `WORKSPACE_TODAY=2026-09-07`로 고정했다. 운영 timezone/서버 시계 연동, 외부 calendar/email/ERP, 1,000건 virtualization은 이 scope에 포함하지 않았다.
+- seed data가 이미 localStorage에 있으면 새 optional workspace fields가 없는 기존 저장 데이터를 그대로 읽을 수 있으므로, 새 필드는 seed가 새로 생성될 때 완전하게 제공된다.
+- AI 제안 중 toast/전역 store/새 dependency/Undo/drag-and-drop은 요구 범위와 안전성에 맞지 않아 채택하지 않았다. 반복된 select/move UI를 별도 범용 abstraction으로 만들자는 방향도 최소 diff 원칙에 따라 재작성했다.
+
+### Post-review 리뷰 / 수정
+
+- Calendar의 `new Date(...).toISOString()`가 Asia/Seoul에서 local midnight를 전날 UTC 날짜로 바꾸어 Sep 6–12 주를 만들고 Sep 13 이벤트를 누락시키는 원인을 확인했다. local Date 구성요소 포맷 helper와 회귀 테스트로 `2026-09-07`–`2026-09-13`을 고정했다.
+- `isApplicant`가 legacy v1의 optional workspace 필드 누락을 valid로 통과시키고 그대로 반환하던 원인을 확인했다. seed ID/index 기반 deterministic backfill을 추가하고 기존 applicant stage/base data와 이미 저장된 optional 값은 보존한다.
+- terminal confirmation의 close/unmount 경로가 originating submit button을 기억하지 않아 cancel/Escape 후 body에 focus가 남던 원인을 확인했다. trigger를 confirmation state에 저장하고 cancel/Escape/unmount에서 한 번만 복귀하도록 했으며, 확인 후 move semantics는 유지했다.
+- Today의 평가/후속/일정 action은 모두 같은 상세 panel open 동작인데 서로 다른 mutation을 암시했다. 모두 `상세 보기`로 재라벨링했고, detail panel은 positions Query의 title을 표시하며 raw position ID fallback을 제거했다.
+- RED → GREEN focused 확인: `src/App.test.tsx` 9개, `workspaceSelectors.test.ts` 4개, `mockDb.test.ts` 14개 테스트 통과.
+- fix 검증: `npm run lint`, `npm run test -- --run`(9개 파일/77개), `npm run build`, `git diff --check` 모두 통과했다. Build는 기존 500kB 초과 chunk warning만 출력했다.
+- 데스크톱 Orca에서 Calendar가 `2026.09.07`부터 `2026.09.13`까지 7일을 표시하고 Sep 13 event를 포함하는 것을 확인했으며, Positions retry 후 6행과 detail panel의 `Frontend Engineer` title을 확인했다.
+- iPhone 12 emulation에서 Applicants/Today/Calendar/Positions를 재확인했다. body width는 390으로 유지되고 table/calendar 내부 overflow만 존재했으며, Today action은 모두 `상세 보기`였다. Console에는 Vite/MSW informational logs와 forced 503→retry 기록만 있고 JavaScript error는 없었다.
+
+### 연결 커밋
+
+- 상태: `최종 동기화 대기`

@@ -10,6 +10,7 @@ import {
 } from './mockConfig'
 
 const applicantsUrl = 'http://localhost/api/applicants'
+const positionsUrl = 'http://localhost/api/positions'
 
 beforeEach(() => {
   localStorage.clear()
@@ -37,6 +38,15 @@ describe('mock applicants API', () => {
 
     expect(response.status).toBe(503)
     await expect(response.json()).resolves.toMatchObject({ code: 'MOCK_FAILURE' })
+  })
+
+  test('returns seeded positions', async () => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+
+    const response = await fetch(positionsUrl)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toHaveLength(6)
   })
 
   test('persists a successful PATCH', async () => {

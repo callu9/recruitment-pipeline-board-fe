@@ -95,3 +95,40 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 - 현재 코드에 미완성 흔적을 남겼는지: 1,000건 데이터 모드, 메모이제이션, 컬럼별 가상 스크롤, README 실행 방법은 구현하지 않았으며 임시 placeholder나 죽은 최적화 코드는 남기지 않았다.
 - 이어서 구현한다면 첫 단계: 1,000건 고정 fixture와 실행 방법을 추가하고 필터 입력 지연·컬럼 스크롤을 측정한 뒤, 병목이 확인될 때만 selector 메모이제이션과 컬럼별 가상화를 적용한다.
 - Must 결과물에 미치는 영향: 기본 240건의 FR-01~FR-08 및 FR-11 구현에는 영향이 없지만, FR-10의 1,000건 부드러운 동작 수용 기준은 아직 충족하지 않는다.
+
+## D-011. 채용 운영 workspace의 범위와 안전한 단순화
+
+### 결정
+
+- 기존 다섯 컬럼 보드는 Applicants dense table/list와 Applicants·Today·Calendar·Positions 탭으로 대체한다.
+- 일정·평가·메모·timeline·포지션은 기존 지원자 Query cache와 최소 mock API 응답에 함께 둔다. 외부 calendar/email/ERP 연동은 추가하지 않는다.
+- 일반 단계 변경은 확인 없이 시작하고, HIRED/REJECTED만 native confirmation dialog를 사용한다.
+- 날짜는 결정적인 `WORKSPACE_TODAY` seed 기준(`2026-09-07`)으로 생성해 mock 화면과 테스트가 안정적으로 오늘 큐를 보여 주게 한다. 실제 운영에서는 서버 기준 날짜로 교체한다.
+- 좁은 화면에서는 페이지 전체가 아니라 table/calendar 영역만 가로 스크롤한다. 다섯 컬럼을 가로로 탐색하는 보드는 복원하지 않는다.
+- Undo는 외부 시스템과의 상태 불일치를 만들 수 있고 안전한 역방향 API 정책이 없어 구현하지 않는다.
+
+### 이유
+
+- 운영자가 한 화면에서 다음 액션·일정·평가 공백을 확인하려면 카드보다 정렬 가능한 행과 보조 panel이 정보 밀도와 맥락 보존에 유리하다.
+- 실제 API와 Query cache를 유지하면 화면별 local state 복제나 fake metrics 없이 같은 지원자 데이터를 재사용할 수 있다.
+- terminal 상태만 확인하게 하면 일상 작업의 마찰은 줄이면서 되돌리기 어려운 결정을 한 번 더 확인할 수 있다.
+
+### 미완료/제한
+
+- seed 날짜는 제품의 시간대·서버 시계 연동이 아니므로 운영 캘린더의 timezone 정책은 후속 범위다.
+- 현재 mock은 240명의 전체 행을 렌더링하며 별도 virtualization을 추가하지 않았다. 실제 1,000건 병목이 측정될 때만 최적화한다.
+
+## D-012. workspace post-review fixes
+
+### 결정
+
+- Calendar 주간 날짜는 `toISOString()`으로 표시하지 않고 local `Date` 구성요소로 포맷해 `WORKSPACE_TODAY`부터 7일을 포함한다. 날짜-only mock 값은 UTC 변환 대상이 아니다.
+- valid legacy v1 applicants는 기존 필수 데이터와 stage를 보존한 채 seed ID/index에 대응하는 workspace 필드만 backfill하고 localStorage에 다시 저장한다. 이미 값이 있는 optional 필드(특히 `schedule: null`, 빈 배열)는 덮어쓰지 않는다.
+- terminal confirmation은 submit origin button을 기억하고 cancel/Escape/unmount 시 그 button으로 focus를 복원한다. 확인 후에는 optimistic move 흐름을 그대로 유지한다.
+- Today 큐의 모든 action은 실제 동작인 상세 panel 열기를 표시하도록 `상세 보기`로 통일한다. 별도 평가/일정 mutation은 범위 밖이다.
+- 상세 panel의 포지션은 ID가 아니라 positions Query 결과의 title로 표시하며, 매칭되지 않은 ID는 raw ID를 노출하지 않고 `미지정`으로 표시한다.
+
+### 검증
+
+- post-review RED 테스트에서 UTC 주간 drift, legacy workspace field 누락, terminal focus 손실, misleading Today labels, raw position ID를 각각 재현했다.
+- 각 수정은 기존 Query cache source, pending guard, entity-only rollback, terminal-only confirmation 계약을 변경하지 않았다.

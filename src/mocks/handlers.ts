@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { canTransitionTo, STAGES } from '../features/recruitment-board/model/stages'
 import type { ApiErrorBody, MoveApplicantStageRequest } from '../features/recruitment-board/model/applicant.types'
-import { getApplicantSnapshot, loadApplicants, updateApplicantStage } from './mockDb'
+import { getApplicantSnapshot, loadApplicants, loadPositions, updateApplicantStage } from './mockDb'
 import { shouldMockApiFail, waitForMockDelay } from './mockConfig'
 
 function error(status: number, code: ApiErrorBody['code'], message: string) {
@@ -22,6 +22,12 @@ export const handlers = [
     if (shouldMockApiFail()) return error(503, 'MOCK_FAILURE', '지원자 목록을 불러오지 못했습니다.')
 
     return HttpResponse.json(loadApplicants())
+  }),
+
+  http.get('*/api/positions', async () => {
+    await waitForMockDelay()
+    if (shouldMockApiFail()) return error(503, 'MOCK_FAILURE', '포지션 정보를 불러오지 못했습니다.')
+    return HttpResponse.json(loadPositions())
   }),
 
   http.patch('*/api/applicants/:applicantId/stage', async ({ params, request }) => {
