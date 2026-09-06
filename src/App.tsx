@@ -72,6 +72,7 @@ function StageConfirmationDialog({ applicant, targetStage, onCancel, onConfirm }
   const onCancelRef = useRef(onCancel)
   const onConfirmRef = useRef(onConfirm)
   const finalizedRef = useRef(false)
+  const mountedRef = useRef(false)
   const titleId = `confirm-stage-${applicant.id}`
   onCancelRef.current = onCancel
   onConfirmRef.current = onConfirm
@@ -79,6 +80,7 @@ function StageConfirmationDialog({ applicant, targetStage, onCancel, onConfirm }
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
+    mountedRef.current = true
     const cancelOnce = () => {
       if (finalizedRef.current) return
       finalizedRef.current = true
@@ -88,10 +90,14 @@ function StageConfirmationDialog({ applicant, targetStage, onCancel, onConfirm }
     const close = () => cancelOnce()
     dialog.addEventListener('close', close)
     return () => {
+      mountedRef.current = false
       dialog.removeEventListener('close', close)
       if (dialog.open && !finalizedRef.current) {
-        dialog.close()
-        cancelOnce()
+        window.setTimeout(() => {
+          if (mountedRef.current || finalizedRef.current) return
+          if (dialog.open) dialog.close()
+          cancelOnce()
+        }, 0)
       }
     }
   }, [])

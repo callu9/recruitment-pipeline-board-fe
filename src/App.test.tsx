@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test } from 'vitest'
 import { http, HttpResponse } from 'msw'
@@ -10,12 +11,13 @@ import { server } from './test/server'
 if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function showModal() { this.open = true }
 if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function close() { this.open = false; this.dispatchEvent(new Event('close')) }
 
-const renderApp = (applicants = createSeedApplicants(12)) => {
+const renderApp = (applicants = createSeedApplicants(12), strict = false) => {
   server.use(
     http.get('*/api/applicants', () => HttpResponse.json(applicants)),
     http.get('*/api/positions', () => HttpResponse.json(SEED_POSITIONS)),
   )
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+  const content = <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>
+  return render(strict ? <StrictMode>{content}</StrictMode> : content)
 }
 
 afterEach(() => {
@@ -88,23 +90,27 @@ test('requires confirmation only for terminal stage moves', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('최종합격')
 })
 
-test('restores the originating stage button focus after terminal cancel and Escape', async () => {
+test('keeps terminal confirmation open in StrictMode and restores originating focus', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
-  server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...applicant, stage: 'HIRED' })))
-  renderApp([applicant])
+  let patchCount = 0
+  server.use(http.patch('*/api/applicants/:applicantId/stage', () => { patchCount += 1; return HttpResponse.json({ ...applicant, stage: 'HIRED' }) }))
+  renderApp([applicant], true)
   const form = await screen.findByRole('form', { name: '김민지 단계 변경' })
   const actionButton = within(form).getByRole('button', { name: '적용' })
 
   fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'HIRED' } })
   fireEvent.submit(form)
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '취소' }))
   expect(document.activeElement).toBe(actionButton)
+  expect(patchCount).toBe(0)
 
   fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'HIRED' } })
   fireEvent.submit(form)
   fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }))
   expect(document.activeElement).toBe(actionButton)
+  expect(patchCount).toBe(0)
 })
 
 test('exposes Today, Calendar, and Positions operations views', async () => {
