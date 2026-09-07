@@ -3744,7 +3744,11 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 ### 프롬프트 1 — 구현 요청
 
 ```text
-[implementation] Own the complete [recruitment-workspace-ux] feature in the current worktree/branch feat-recruitment-workspace-ux. Read AGENTS.md and the required docs in order, then inspect the existing React/TypeScript/TanStack Query/MSW/localStorage implementation and recent commits. The user's product scope overrides docs/ASSIGNMENT.md's old Must/Should product scope, but AGENTS.md architecture constraints remain binding. Implement the requested recruitment operations workspace with five-stage applicants view transformed to a dense vertical table/list (not a 5-column horizontal board) with tabs/counts, filters (name, role, owner, stage, no schedule, overdue), reset, row selection with context-preserving right detail panel; Today view with today's interviews, missing evaluations, overdue, unscheduled and detail/actions; internal weekly Calendar with interview/evaluation/offer/start-date events, type/role/owner filters, event detail panel, unscheduled list; Positions view with required counts/deadline/status and applicant navigation; summary metrics only from real data. Extend the domain/seed/mock API/localStorage minimally for owner, next action, due date/schedule, evaluations, notes/timeline, positions and hire-transfer display; keep native Date and CSS. Replace repeated selects/move buttons with concise inline stage changes from row/detail; ordinary transitions need no confirmation, only HIRED/REJECTED confirm; preserve optimistic updates, synchronous same-applicant pending guard, concurrent different applicants, entity-only rollback, status/error feedback, keyboard access. Keep TanStack Query cache source of truth, MSW 200-800ms and ~15% failure, semantic HTML, focus restore, dialog/form labels, loading/query-error/empty/filtered-empty states, desktop and narrow viewport without five-column horizontal navigation, and enough tests for pure transforms and critical flows. No external calendar/email/ERP, no drag/drop, no Zustand/global store, no broad abstraction/new dependency, no fake placeholder metrics. Provide simple undo only if safe and genuinely low complexity; otherwise record the policy reason. Use the current scope name consistently in the PROMPTS heading and commit message. Update only the current scope's PROMPTS section during feature work, preserving prior sections/hashes and recording the actual user prompt plus evidence-based AI summary/review. Update DECISIONS.md only for important assumptions/rejected/unfinished scope. Run npm run lint, npm run test, npm run build, focused tests, git diff --check, and Orca built-in browser checks for desktop/narrow major flows plus console errors. Ensure origin/dev exists; if absent create/push dev from origin/main, then commit the feature, push feat/recruitment-workspace-ux, create a GitHub PR with base dev, and report exact PR URL/number, commit, files, tests, browser scenarios, limitations, and any rejected/re-written suggestions. This task has explicit user authorization for implementation, commit, push, PR, and independent review as the validation gate.
+1. 단순 파이프라인 보드에서 ERP 혹은 채용관리 시스템으로 확장할 수 있는 방안 제안
+2. 추가로 현재 화면은 5단계를 가로로 확인해야 하는 과정이 불필요한 사용자 시선을 만든다고 생각해. 또한 캘린더/이메일 연동은 너무 불필요한 것 같다. 캘린더 뷰를 만드는 게 나을 것. 과제 내용은 이제 모두 반영하지 않아도 되니까 참고하지 않도록 하고, 사용성 개선까지 생각해서 개선점 목록화
+3. 전체 개선 구현을 Orca한테 시켜줘. PR 생성, Orca 새 세션을 열도록 해서 리뷰/검수 받고 추가 개선, dev 머지까지
+4. 모델/추론수준 제한 - Luna, xhigh
+5. 너는 오케스트레이터로 지시만 하고, 최종 완료 보고를 Orca한테 받기만 할 거야. 계속 검수하지 않도록 주의 해.
 ```
 
 ### AI 출력 요지
@@ -3772,7 +3776,7 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 
 #### 검토 범위와 제한
 
-- Query cache 단일 source, MSW 200–800ms/기본 15% 실패, same-applicant guard/entity rollback, keyboard/semantic labels, loading/query-error/empty/filtered-empty states를 코드·테스트로 확인했다.
+- Query cache 단일 source, MSW 200–800ms/기본 15% 실패, same-applicant guard/entity rollback, semantic labels, loading/query-error/empty/filtered-empty states를 코드·테스트로 확인했다.
 - 날짜는 안정적인 mock Today를 위해 `WORKSPACE_TODAY=2026-09-07`로 고정했다. 운영 timezone/서버 시계 연동, 외부 calendar/email/ERP, 1,000건 virtualization은 이 scope에 포함하지 않았다.
 - seed data가 이미 localStorage에 있으면 새 optional workspace fields가 없는 기존 저장 데이터를 그대로 읽을 수 있으므로, 새 필드는 seed가 새로 생성될 때 완전하게 제공된다.
 - AI 제안 중 toast/전역 store/새 dependency/Undo/drag-and-drop은 요구 범위와 안전성에 맞지 않아 채택하지 않았다. 반복된 select/move UI를 별도 범용 abstraction으로 만들자는 방향도 최소 diff 원칙에 따라 재작성했다.
@@ -3788,6 +3792,22 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 - 데스크톱 Orca에서 Calendar가 `2026.09.07`부터 `2026.09.13`까지 7일을 표시하고 Sep 13 event를 포함하는 것을 확인했으며, Positions retry 후 6행과 detail panel의 `Frontend Engineer` title을 확인했다.
 - iPhone 12 emulation에서 Applicants/Today/Calendar/Positions를 재확인했다. body width는 390으로 유지되고 table/calendar 내부 overflow만 존재했으며, Today action은 모두 `상세 보기`였다. Console에는 Vite/MSW informational logs와 forced 503→retry 기록만 있고 JavaScript error는 없었다.
 
+#### 독립 Luna/xhigh 검토
+
+- 기존 Orca 최종 보고의 재검증에서 `VITE_MOCK_FAILURE_RATE=1` 조회 오류와 retry를 재현했고, 첫 GET 약 428ms·retry 약 531ms, `role="alert"`, MSW 503 로그 및 JavaScript 예외 없음이 확인됐다. `VITE_MOCK_FAILURE_RATE=0`에서는 240행이 로드됐다.
+- 1,000명 모드에서는 DOM 1,000행, DCL/load 158ms, 최초 전체 렌더 778ms, 50,000px scrollTo 0.1ms, 텍스트 검색 2.2ms를 측정했지만 필터링 1,000→167행은 1,418–1,432ms가 걸려 1,000건의 부드러운 필터링은 입증하지 못했다.
+- 데스크톱과 iPhone 15 좁은 화면에서 Applicants/Today/Calendar/Positions를 확인했고 body width 393 및 table 내부 overflow를 확인했다. VoiceOver 프로세스가 없어 스크린리더 announcement sequence는 미검증이며, 해당 Orca 도구의 Enter keypress가 button을 활성화하지 않아 키보드 활성화도 미검증으로 남긴다.
+
 ### 연결 커밋
 
-- 상태: `최종 동기화 대기`
+- 예정 메시지:
+
+  ```text
+  docs(recruitment-workspace-ux): 프롬프트 증거와 검증 기록 동기화
+
+  - 실제 사용자 제공 프롬프트 transcript를 원문 그대로 기록
+  - 병합 커밋과 Orca 최종 보고에 근거한 자동·브라우저 검증을 정리
+  - VoiceOver·키보드 활성화·1,000건 필터링의 미검증 범위를 명시
+  ```
+
+- 해시: `최종 동기화 대기`
