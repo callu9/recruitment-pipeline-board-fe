@@ -40,6 +40,7 @@ export interface ApplicantEvaluation {
   reviewer: ApplicantOwner
   score?: number
   comment?: string
+  submittedAt?: string
 }
 
 export interface ApplicantNote {
@@ -96,7 +97,13 @@ export interface MoveApplicantStageRequest {
   rejectionMemo?: string
 }
 
+export interface SubmitApplicantFeedbackRequest {
+  reviewer: ApplicantOwner
+  score: number
+  comment: string
+}
+
 export interface ApiErrorBody {
-  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_TRANSITION' | 'INVALID_BODY'
+  code: 'MOCK_FAILURE' | 'NOT_FOUND' | 'INVALID_STAGE' | 'INVALID_TRANSITION' | 'INVALID_EVALUATION' | 'INVALID_BODY'
   message: string
 }

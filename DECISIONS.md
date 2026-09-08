@@ -165,3 +165,21 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 
 - forced one-failure/one-success 통합 테스트에서 두 번째 GET 호출과 workspace 복귀를 확인한다.
 - 기본 mock API의 failure rate를 낮추거나 자동 retry로 바꾸지 않는다.
+
+## D-015. 기존 평가 엔티티를 전형 피드백으로 사용한다
+
+### 결정
+
+- 별도 feedback 엔티티 없이 `ApplicantEvaluation`을 전형별 피드백으로 사용한다.
+- 피드백은 API 성공 뒤 Query cache에 병합하고 stage 이동만 기존 optimistic update를 유지한다.
+- 평가자, 점수, 코멘트와 작성일을 저장하고 타임라인에 작성 사실을 남긴다.
+
+### 이유
+
+- 현재 평가 상태와 새 피드백 저장소를 이중 관리하지 않는다.
+- form 입력은 실패 뒤 그대로 유지하면서 저장되지 않은 평가가 다른 화면에 노출되는 일을 막는다.
+
+### 남긴 범위
+
+- 여러 평가자의 독립 제출, 승인, draft, 첨부 파일은 구현하지 않는다.
+- 피드백과 일정에 따른 정상 전진 gate는 `[stage-scheduling]` scope에서 연결한다.
