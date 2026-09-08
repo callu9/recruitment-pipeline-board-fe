@@ -67,19 +67,24 @@ test('opens the context-preserving detail panel and restores trigger focus', asy
 test('moves ordinary stages without a confirmation and shows the updated row', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   renderApp(createSeedApplicants(1))
-  const action = await screen.findByRole('button', { name: /면접으로 진행.*applicant-001/ })
+  const action = await screen.findByRole('button', { name: '면접 집행 · 김민지 · applicant-001' })
+  expect(action).toHaveTextContent('면접 집행')
+  expect(action).not.toHaveTextContent('면접으로 진행')
   fireEvent.click(action)
 
   expect(screen.queryByRole('heading', { name: '단계 변경 확인' })).not.toBeInTheDocument()
   expect(await screen.findByRole('status')).toHaveTextContent('면접')
-  expect(screen.getByRole('button', { name: /처우협의로 진행.*applicant-001/ })).toBeInTheDocument()
+  const offerAction = screen.getByRole('button', { name: '처우 협의 · 김민지 · applicant-001' })
+  expect(offerAction).toHaveTextContent('처우 협의')
+  expect(offerAction).not.toHaveTextContent('처우협의로 진행')
 })
 
 test('offers exactly destination and rejection actions and requires a rejection reason', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   renderApp(createSeedApplicants(1))
-  const reject = await screen.findByRole('button', { name: /불합격.*applicant-001/ })
-  expect(screen.getByRole('button', { name: /면접으로 진행.*applicant-001/ })).toBeInTheDocument()
+  const reject = await screen.findByRole('button', { name: '불합격 처리 · 김민지 · applicant-001' })
+  expect(reject).toHaveTextContent('불합격')
+  expect(screen.getByRole('button', { name: '면접 집행 · 김민지 · applicant-001' })).toHaveTextContent('면접 집행')
   fireEvent.click(reject)
   expect(screen.getByRole('dialog')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '확인' }))
@@ -132,7 +137,9 @@ test('requires confirmation only for terminal stage moves', async () => {
   const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
   server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...applicant, stage: 'HIRED' })))
   renderApp([applicant])
-  const actionButton = await screen.findByRole('button', { name: /최종합격 처리.*applicant-001/ })
+  const actionButton = await screen.findByRole('button', { name: '최종 합격 · 김민지 · applicant-001' })
+  expect(actionButton).toHaveTextContent('최종 합격')
+  expect(actionButton).not.toHaveTextContent('최종합격 처리')
   fireEvent.click(actionButton)
   expect(screen.getByRole('heading', { name: '단계 변경 확인' })).toBeInTheDocument()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -146,7 +153,7 @@ test('keeps terminal confirmation open in StrictMode and restores originating fo
   let patchCount = 0
   server.use(http.patch('*/api/applicants/:applicantId/stage', () => { patchCount += 1; return HttpResponse.json({ ...applicant, stage: 'HIRED' }) }))
   renderApp([applicant], true)
-  const actionButton = await screen.findByRole('button', { name: /최종합격 처리.*applicant-001/ })
+  const actionButton = await screen.findByRole('button', { name: '최종 합격 · 김민지 · applicant-001' })
 
   fireEvent.click(actionButton)
   expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -180,18 +187,23 @@ test('exposes Today, Calendar, and Positions operations views', async () => {
   expect(screen.getByText('Frontend Engineer')).toBeInTheDocument()
 })
 
-test('reports query errors and lets the user retry', async () => {
+test('retries applicants after one initial failure and exposes the active refetch', async () => {
   let requests = 0
   server.use(
     http.get('*/api/applicants', () => {
       requests += 1
-      return requests === 1 ? HttpResponse.json({ message: 'fail' }, { status: 503 }) : HttpResponse.json(createSeedApplicants(1))
+      if (requests === 1) return HttpResponse.json({ message: 'fail' }, { status: 503 })
+      return new Promise((resolve) => setTimeout(() => resolve(HttpResponse.json(createSeedApplicants(1))), 50))
     }),
     http.get('*/api/positions', () => HttpResponse.json(SEED_POSITIONS)),
   )
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
   expect(await screen.findByRole('alert')).toHaveTextContent('지원자 정보를 불러오지 못했습니다.')
-  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+  const retryButton = screen.getByRole('button', { name: '다시 시도' })
+  fireEvent.click(retryButton)
+  await waitFor(() => expect(retryButton).toBeDisabled())
+  expect(screen.getByRole('alert')).toHaveAttribute('aria-busy', 'true')
+  fireEvent.click(retryButton)
   expect(await screen.findByRole('table', { name: '지원자 목록' })).toBeInTheDocument()
   expect(requests).toBe(2)
 })
@@ -209,9 +221,9 @@ test('keeps optimistic rollback scoped to the failed applicant', async () => {
     }),
   )
   renderApp(applicants)
-  const firstAction = await screen.findByRole('button', { name: /면접으로 진행.*applicant-001/ })
+  const firstAction = await screen.findByRole('button', { name: '면접 집행 · 김민지 · applicant-001' })
   fireEvent.click(firstAction)
-  const secondAction = screen.getByRole('button', { name: /처우협의로 진행.*applicant-002/ })
+  const secondAction = screen.getByRole('button', { name: '처우 협의 · Alex Kim · applicant-002' })
   fireEvent.click(secondAction)
   await waitFor(() => expect(patchCount).toBe(2))
   expect(await screen.findByRole('alert')).toHaveTextContent('이전 상태로 복원')

@@ -148,3 +148,20 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 - 날짜를 한 곳에서 고정하면 운영 화면이 시간이 지날수록 낡고, 날짜를 순수 함수 인자로 주면 테스트 결정성을 유지할 수 있다.
 - 전이 결과를 한 domain operation으로 만들면 서버 성공과 optimistic 상태가 timeline/nextAction을 서로 다르게 남기는 회귀를 막는다.
 - 배포를 동일 workflow의 검증 job 뒤에 두면 `workflow_run`의 기본 브랜치·권한·신뢰 경계 문제 없이 검증된 동일 revision만 Pages에 올라간다.
+
+## D-014. action copy와 조회 재시도 상호작용 경계
+
+### 결정
+
+- 활성 단계의 primary action은 단계 정책을 유지하면서 `면접 집행`, `처우 협의`, `최종 합격`으로 표시한다. 지원자별 accessible name은 지원자 식별자를 suffix하고, secondary action의 visible label은 `불합격`을 유지한다.
+- applicants 조회 retry는 자동 재시도를 추가하지 않고, 사용자가 누른 한 번의 `refetch` 요청이 진행 중일 때만 retry button을 동기적으로 비활성화한다. 재요청은 `cancelRefetch: false`로 기존 요청을 취소하지 않으며, 실패율 약 15% 설정은 그대로 둔다.
+
+### 이유
+
+- 기존 primary label이 사용자가 승인한 concise copy와 달라 production UI·접근성 이름이 모두 오래된 문구를 노출했다.
+- 기존 error branch의 retry button은 refetch 중에도 활성 상태여서 빠른 연속 입력이 진행 중인 요청을 취소할 수 있고, 조회 상태 변화가 error UI를 즉시 교체해 실제 재요청 여부를 사용자가 확인하기 어려웠다. local pending guard와 `aria-busy`로 한 번의 재시도 흐름을 명시했다.
+
+### 검증 경계
+
+- forced one-failure/one-success 통합 테스트에서 두 번째 GET 호출과 workspace 복귀를 확인한다.
+- 기본 mock API의 failure rate를 낮추거나 자동 retry로 바꾸지 않는다.
