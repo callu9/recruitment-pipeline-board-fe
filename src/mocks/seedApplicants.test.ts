@@ -15,6 +15,13 @@ describe('createSeedApplicants', () => {
     expect(createSeedApplicants(240)).toEqual(createSeedApplicants(240))
   })
 
+  test('accepts an injected local date for deterministic operational dates', () => {
+    const applicants = createSeedApplicants(2, '2026-09-07')
+
+    expect(applicants[1]?.schedule?.date).toBe('2026-09-07')
+    expect(applicants[0]?.dueDate).toBe('2026-09-05')
+  })
+
   test('preserves requested size, unique IDs, and role and stage cycles', () => {
     const applicants = createSeedApplicants(13)
 

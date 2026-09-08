@@ -5,9 +5,7 @@ import {
   type Applicant,
   type Position,
 } from '../features/recruitment-board/model/applicant.types'
-import { STAGES } from '../features/recruitment-board/model/stages'
-
-export const DEMO_TODAY = '2026-09-07'
+import { getLocalDateString, STAGES } from '../features/recruitment-board/model/stages'
 
 const APPLICANT_NAMES = ['김민지', 'Alex Kim', '이서준', 'Jordan Lee', '박소연', 'Mina Patel']
 
@@ -22,7 +20,14 @@ export const SEED_POSITIONS: Position[] = [
 
 const pad = (value: number) => String(value).padStart(2, '0')
 
-export function createSeedApplicants(size = 240): Applicant[] {
+function addDays(today: string, offset: number) {
+  const [year, month, date] = today.split('-').map(Number)
+  const value = new Date(year, month - 1, date)
+  value.setDate(value.getDate() + offset)
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+}
+
+export function createSeedApplicants(size = 240, today = getLocalDateString()): Applicant[] {
   return Array.from({ length: size }, (_, index) => {
     const number = index + 1
     const role = APPLICANT_ROLES[index % APPLICANT_ROLES.length]
@@ -31,7 +36,7 @@ export function createSeedApplicants(size = 240): Applicant[] {
     const isTodayInterview = stage === 'INTERVIEW' && index % 3 === 1
     const schedule = stage === 'INTERVIEW' && index % 4 !== 0
       ? {
-          date: isTodayInterview ? DEMO_TODAY : `2026-09-${pad(8 + (index % 7))}`,
+          date: isTodayInterview ? today : addDays(today, 1 + (index % 7)),
           startTime: `${pad(9 + (index % 8))}:00`,
           endTime: `${pad(10 + (index % 8))}:00`,
           format: index % 2 === 0 ? 'VIDEO' as const : 'ONSITE' as const,
@@ -44,7 +49,7 @@ export function createSeedApplicants(size = 240): Applicant[] {
         id: `evaluation-${number}`,
         type: evaluationType,
         status: index % 5 === 0 ? 'PENDING' as const : 'SUBMITTED' as const,
-        dueDate: index % 7 === 0 ? '2026-09-05' : `2026-09-${pad(8 + (index % 12))}`,
+        dueDate: index % 7 === 0 ? addDays(today, -2) : addDays(today, 1 + (index % 12)),
         reviewer: APPLICANT_OWNERS[index % APPLICANT_OWNERS.length],
         score: index % 5 === 0 ? undefined : 70 + (index % 26),
         comment: index % 5 === 0 ? undefined : '다음 인터뷰에서 협업 경험을 확인합니다.',
@@ -65,7 +70,7 @@ export function createSeedApplicants(size = 240): Applicant[] {
       owner: APPLICANT_OWNERS[index % APPLICANT_OWNERS.length],
       positionId: position.id,
       nextAction: stage === 'INTERVIEW' ? (schedule ? '인터뷰 준비' : '인터뷰 일정 등록') : stage === 'OFFER' ? '처우안 발송' : stage === 'HIRED' ? '입사 안내' : '서류 검토',
-      dueDate: index % 7 === 0 ? '2026-09-05' : `2026-09-${pad(8 + (index % 12))}`,
+      dueDate: index % 7 === 0 ? addDays(today, -2) : addDays(today, 1 + (index % 12)),
       schedule,
       evaluations,
       notes: [{ id: `note-${number}`, author: APPLICANT_OWNERS[index % APPLICANT_OWNERS.length], createdAt: '2026-09-01', text: `${role} 지원자 초기 메모` }],

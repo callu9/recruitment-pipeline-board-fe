@@ -63,6 +63,33 @@ describe('mock applicants API', () => {
     expect(loadApplicants().find(({ id }) => id === 'applicant-001')).toMatchObject({ stage: 'INTERVIEW' })
   })
 
+  test('requires a reason for rejection and keeps the rejection details in the applicant history', async () => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+    const missingReason = await fetch(`${applicantsUrl}/applicant-001/stage`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'REJECTED' }),
+    })
+    expect(missingReason.status).toBe(400)
+
+    const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: 'REJECTED', transitionAt: '2026-09-08', rejectionReason: '경력 요건 불일치', rejectionMemo: '추후 재지원 가능' }),
+    })
+    expect(response.status).toBe(200)
+    const updated = await response.json()
+    expect(updated).toMatchObject({ stage: 'REJECTED', rejectionReason: '경력 요건 불일치', rejectionMemo: '추후 재지원 가능', timeline: expect.arrayContaining([expect.objectContaining({ at: '2026-09-08', label: '서류검토 → 불합격' })]) })
+    expect(updated).not.toHaveProperty('nextAction')
+  })
+
+  test('allows explicit detail-only correction without changing the ordinary one-way policy', async () => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+    await fetch(applicantsUrl)
+    const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'OFFER', correction: true, transitionAt: '2026-09-08' }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ stage: 'OFFER', timeline: expect.arrayContaining([expect.objectContaining({ label: '서류검토 → 처우협의 (단계 정정)' })]) })
+  })
+
   test('does not change storage when PATCH failure is forced', async () => {
     setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
     await fetch(applicantsUrl)
@@ -175,7 +202,7 @@ describe('mock applicants API', () => {
       fetch(`${applicantsUrl}/applicant-002/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: 'REJECTED' }),
+        body: JSON.stringify({ stage: 'REJECTED', rejectionReason: '직무 요건 불일치' }),
       }),
     ])
 

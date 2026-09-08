@@ -20,9 +20,9 @@ const secondApplicant: Applicant = { ...firstApplicant, id: 'applicant-2', name:
 test('moves only the requested applicant without changing the cached inputs', () => {
   const applicants = [firstApplicant, secondApplicant]
 
-  const updated = moveApplicantOptimistically(applicants, firstApplicant.id, 'INTERVIEW')
+  const updated = moveApplicantOptimistically(applicants, firstApplicant.id, 'INTERVIEW', '2026-09-08')
 
-  expect(updated).toEqual([{ ...firstApplicant, stage: 'INTERVIEW' }, secondApplicant])
+  expect(updated[0]).toMatchObject({ ...firstApplicant, stage: 'INTERVIEW', nextAction: '인터뷰 일정 등록', timeline: [{ at: '2026-09-08', label: '서류검토 → 면접' }] })
   expect(applicants).toEqual([firstApplicant, secondApplicant])
   expect(updated[1]).toBe(secondApplicant)
 })
