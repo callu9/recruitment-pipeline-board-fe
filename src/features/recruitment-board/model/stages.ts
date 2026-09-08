@@ -1,4 +1,10 @@
-import type { Applicant, ApplicantStage } from './applicant.types'
+import {
+  APPLICANT_OWNERS,
+  type Applicant,
+  type ApplicantStage,
+  type EvaluationType,
+  type SubmitApplicantFeedbackRequest,
+} from './applicant.types'
 
 export const STAGES = [
   { code: 'DOCUMENT_REVIEW', label: '서류검토' },
@@ -18,6 +24,12 @@ export const ALLOWED_NEXT_STAGES: Readonly<Record<ApplicantStage, readonly Appli
 
 export const TERMINAL_STAGES: readonly ApplicantStage[] = ['HIRED', 'REJECTED']
 
+export const STAGE_EVALUATION_TYPES: Partial<Record<ApplicantStage, EvaluationType>> = {
+  DOCUMENT_REVIEW: 'SCREEN',
+  INTERVIEW: 'INTERVIEW',
+  OFFER: 'FINAL',
+}
+
 export function isTerminalStage(stage: ApplicantStage) {
   return TERMINAL_STAGES.includes(stage)
 }
@@ -34,6 +46,42 @@ export function getForwardActionLabel(currentStage: ApplicantStage) {
   if (destination === 'HIRED') return '최종 합격'
   if (destination === 'OFFER') return '처우 협의'
   return '면접 집행'
+}
+
+export function getCurrentStageEvaluation(applicant: Applicant) {
+  const type = STAGE_EVALUATION_TYPES[applicant.stage]
+  return type ? applicant.evaluations?.find((evaluation) => evaluation.type === type) : undefined
+}
+
+export function submitApplicantEvaluation(
+  applicant: Applicant,
+  evaluationId: string,
+  values: SubmitApplicantFeedbackRequest,
+  submittedAt: string,
+): Applicant {
+  if (!applicant.evaluations?.some(({ id }) => id === evaluationId)) return applicant
+
+  return {
+    ...applicant,
+    evaluations: applicant.evaluations.map((evaluation) => evaluation.id === evaluationId
+      ? {
+          ...evaluation,
+          status: 'SUBMITTED',
+          reviewer: values.reviewer,
+          score: values.score,
+          comment: values.comment.trim(),
+          submittedAt,
+        }
+      : evaluation),
+    timeline: [
+      ...(applicant.timeline ?? []),
+      {
+        id: `timeline-${applicant.id}-${(applicant.timeline ?? []).length + 1}`,
+        at: submittedAt,
+        label: `${stageLabel(applicant.stage)} 피드백 작성`,
+      },
+    ],
+  }
 }
 
 export interface StageTransitionOptions {
@@ -63,12 +111,29 @@ export function applyStageTransition(
       : targetStage === 'DOCUMENT_REVIEW'
         ? '서류 검토'
         : undefined
+  const targetEvaluationType = STAGE_EVALUATION_TYPES[targetStage]
+  const targetSchedule = targetStage === 'INTERVIEW' ? applicant.schedule : null
+  const scheduleReviewer = APPLICANT_OWNERS.find((owner) => owner === targetSchedule?.interviewer)
+  const evaluations = targetEvaluationType
+    && !(applicant.evaluations ?? []).some(({ type }) => type === targetEvaluationType)
+    ? [
+        ...(applicant.evaluations ?? []),
+        {
+          id: `evaluation-${applicant.id}-${targetEvaluationType.toLowerCase()}`,
+          type: targetEvaluationType,
+          status: 'PENDING' as const,
+          dueDate: targetSchedule?.date ?? transitionAt,
+          reviewer: scheduleReviewer ?? applicant.owner ?? APPLICANT_OWNERS[0],
+        },
+      ]
+    : applicant.evaluations
   return {
     ...applicant,
     stage: targetStage,
     nextAction,
     rejectionReason: targetStage === 'REJECTED' ? options.rejectionReason?.trim() : undefined,
     rejectionMemo: targetStage === 'REJECTED' ? options.rejectionMemo?.trim() || undefined : undefined,
+    evaluations,
     timeline,
   }
 }

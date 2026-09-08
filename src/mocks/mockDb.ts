@@ -1,5 +1,5 @@
-import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position } from '../features/recruitment-board/model/applicant.types'
-import { applyStageTransition, getLocalDateString, STAGES, type StageTransitionOptions } from '../features/recruitment-board/model/stages'
+import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position, type SubmitApplicantFeedbackRequest } from '../features/recruitment-board/model/applicant.types'
+import { applyStageTransition, getLocalDateString, STAGES, submitApplicantEvaluation, type StageTransitionOptions } from '../features/recruitment-board/model/stages'
 import { createSeedApplicants, SEED_POSITIONS } from './seedApplicants'
 import {
   DEFAULT_APPLICANT_SEED_SIZE,
@@ -118,6 +118,21 @@ export function updateApplicantStage(applicantId: string, stage: ApplicantStage,
 
   const updatedApplicant = applyStageTransition(applicant, stage, transitionAt, options)
   saveApplicants(applicants.map((current) => (current.id === applicantId ? updatedApplicant : current)))
+  return updatedApplicant
+}
+
+export function updateApplicantEvaluation(
+  applicantId: string,
+  evaluationId: string,
+  values: SubmitApplicantFeedbackRequest,
+  submittedAt = getLocalDateString(),
+): Applicant {
+  const applicants = loadApplicants()
+  const applicant = applicants.find(({ id }) => id === applicantId)
+  if (!applicant) throw new Error(`Applicant not found: ${applicantId}`)
+
+  const updatedApplicant = submitApplicantEvaluation(applicant, evaluationId, values, submittedAt)
+  saveApplicants(applicants.map((current) => current.id === applicantId ? updatedApplicant : current))
   return updatedApplicant
 }
 

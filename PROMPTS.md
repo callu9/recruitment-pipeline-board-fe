@@ -3947,3 +3947,66 @@ PRD 업데이트 필요한지 알려줘
   ```
 
 - 해시: `최종 동기화 대기`
+
+## [stage-feedback] 전형별 내부 피드백 작성 흐름
+
+### 프롬프트 1 — 서비스 흐름 분석과 개선 요청
+
+```text
+dev에서 워크트리 따서
+서비스 흐름 개선 작업할 거임. 예를 들어 전형별 내부 피드백 남기는 흐름이 없고, 면접/처우협의 단계의 일정 관리도 현재 일정의 캘린더를 확인해서 기입하는 단계도 없어서 실제 사용자로써는 “이게 어떻게 돌아가는지” 이해하기 전에 놓치는 흐름이 많다
+추가로, 1000개 테스트용으로 추가된 dirty 목업 데이터를 정리한다
+작업 전 분석 및 개선제안 먼저.
+```
+
+### 승인과 기록 제한
+
+- 분석·개선 제안 뒤 사용자가 1번 범위인 전형별 내부 피드백 구현을 선택했다.
+- 사용자는 unstaged candidate 보고 뒤 `검증 승인`으로 validation gate를 통과시켰다.
+- `PROMPT_LOG_SESSION_ID=01a08085-f38b-7831-9b7d-628a794f6a63`를 prompt-record reader에 전달했으나 로그를 찾지 못했다. 사용자가 예외 처리를 승인해 현재 대화에서 확인 가능한 원문과 실제 작업 결과만 근거로 기록했다.
+
+### AI 출력 요지
+
+- 전체 요청을 `[stage-feedback]`, `[stage-scheduling]`, mock 정리의 독립 scope로 나누고, Must 안정화 원칙에 따라 현재 전형의 내부 피드백 작성 흐름만 먼저 구현했다.
+- 기존 `ApplicantEvaluation`을 재사용해 현재 stage의 pending 평가를 조회·제출하고, stage 진입 시 누락된 평가만 생성하는 순수 domain 변환을 추가했다.
+- feedback PATCH mock API와 localStorage 저장, 필수 입력·현재 전형·pending 상태 검증을 추가하고, 성공 후에만 Query cache를 갱신하도록 했다.
+- 상세 dialog에 접근 가능한 작성 form과 완료 내용을 연결하고, 실패 시 입력 보존·재시도와 동일 지원자 중복 저장 방지를 구현했다.
+
+### 리뷰 / 검증
+
+#### 자동 검증
+
+- domain, mock API, UI 계약을 각각 RED로 확인한 뒤 구현했고, 중복 평가 생성과 제출 완료 평가 덮어쓰기 경계 테스트도 실패를 먼저 확인한 뒤 통과시켰다.
+- 최종 `npm run lint` — 통과.
+- 최종 `npm run test` — 9개 파일, 110개 테스트 통과.
+- 최종 `npm run build` — 통과. Vite의 500kB 초과 chunk warning만 출력됐다.
+- `git diff --check` — 통과.
+
+#### 브라우저 검증
+
+- 상세 dialog에서 평가자 `이서준`, 점수 `88`, 코멘트를 저장하고 완료 내용·작성일·타임라인 반영을 확인했다.
+- 새로고침 중 mock GET의 무작위 실패가 두 번 발생했으며, 세 번째 재시도 성공 뒤 저장한 피드백의 localStorage 영속화를 확인했다.
+- 키보드 Enter로 상세를 열고 Escape로 닫은 뒤 원래 trigger에 focus가 복귀하는 것을 확인했다. 브라우저 console error는 없었다.
+- forced PATCH 실패, 제출 완료 평가 재저장 거부, 동일 지원자 중복 저장 방지는 자동 테스트로 검증했고 브라우저에서는 별도로 반복하지 않았다.
+
+#### 범위와 판단
+
+- FR-12의 현재 전형 평가 작성, 필수 입력, 성공 후 완료 표시·타임라인, 실패 시 기존 데이터·입력 유지, stage 진입 시 pending 평가 생성 조건을 코드와 테스트로 확인했다.
+- 여러 평가자의 독립 제출, 승인, draft, 첨부, 제출 후 편집은 이번 범위에서 제외했다.
+- 면접·처우협의 일정 작성과 현재 Calendar 확인, 상태 기반 다음 action, 1,000건 dirty mock 정리는 다음 scope로 남겼다.
+- 새 feedback entity, 전역 store, form library, optimistic feedback 제출은 기존 모델과 설치 의존성으로 충분해 채택하지 않았다.
+- 사용자는 위 unstaged candidate와 검증 근거를 보고 `검증 승인`했으며, 승인 이후 application code 변경은 없었다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(stage-feedback): 전형별 내부 피드백 작성 흐름 추가
+
+  - 현재 전형 평가 작성과 완료 내용을 상세 패널에 연결
+  - mock API/localStorage 저장 및 입력 검증·실패 복구 추가
+  - stage 전이 시 pending 평가 생성과 중복 방지 검증
+  ```
+
+- 해시: 최종 동기화 대기

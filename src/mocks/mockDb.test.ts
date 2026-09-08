@@ -6,6 +6,7 @@ import {
   getApplicantsStorageKey,
   loadApplicants,
   saveApplicants,
+  updateApplicantEvaluation,
   updateApplicantStage,
 } from './mockDb'
 import { createSeedApplicants } from './seedApplicants'
@@ -116,5 +117,21 @@ describe('loadApplicants', () => {
 
     expect(loadApplicants()).toHaveLength(240)
     expect(warn).toHaveBeenCalled()
+  })
+})
+
+describe('updateApplicantEvaluation', () => {
+  test('updates one evaluation and leaves other applicants unchanged', () => {
+    const applicants = createSeedApplicants(2)
+    saveApplicants(applicants)
+    const evaluation = applicants[0]?.evaluations?.[0]
+    expect(evaluation).toBeDefined()
+
+    const updated = updateApplicantEvaluation(applicants[0]!.id, evaluation!.id, {
+      reviewer: '이서준', score: 91, comment: '기술 선택의 근거가 명확합니다.',
+    }, '2026-09-08')
+
+    expect(updated.evaluations?.[0]).toMatchObject({ status: 'SUBMITTED', score: 91 })
+    expect(loadApplicants()[1]).toEqual(applicants[1])
   })
 })

@@ -229,3 +229,77 @@ test('keeps optimistic rollback scoped to the failed applicant', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('이전 상태로 복원')
   expect(screen.getByRole('status')).toHaveTextContent('Alex Kim')
 })
+
+test('submits the current-stage feedback from the detail panel', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  renderApp(createSeedApplicants(1))
+  const table = await screen.findByRole('table', { name: '지원자 목록' })
+  fireEvent.click(within(table).getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
+
+  const form = screen.getByRole('form', { name: '서류검토 피드백' })
+  fireEvent.change(within(form).getByLabelText('평가자'), { target: { value: '이서준' } })
+  fireEvent.change(within(form).getByLabelText('점수'), { target: { value: '88' } })
+  fireEvent.change(within(form).getByLabelText('코멘트'), { target: { value: '문제 해결 근거가 명확합니다.' } })
+  fireEvent.click(within(form).getByRole('button', { name: '피드백 저장' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('피드백을 저장했습니다')
+  const dialog = screen.getByRole('dialog', { name: /김민지/ })
+  expect(within(dialog).getByText('문제 해결 근거가 명확합니다.')).toBeInTheDocument()
+  expect(within(dialog).getByText(/이서준 · 작성/)).toBeInTheDocument()
+  expect(screen.queryByRole('form', { name: '서류검토 피드백' })).not.toBeInTheDocument()
+})
+
+test('keeps feedback input after a failed save', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  server.use(http.patch('*/api/applicants/:applicantId/evaluations/:evaluationId', () =>
+    HttpResponse.json({ code: 'MOCK_FAILURE' }, { status: 503 })))
+  renderApp(createSeedApplicants(1))
+  const table = await screen.findByRole('table', { name: '지원자 목록' })
+  fireEvent.click(within(table).getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
+
+  const form = screen.getByRole('form', { name: '서류검토 피드백' })
+  fireEvent.change(within(form).getByLabelText('점수'), { target: { value: '88' } })
+  fireEvent.change(within(form).getByLabelText('코멘트'), { target: { value: '입력 유지 확인' } })
+  fireEvent.click(within(form).getByRole('button', { name: '피드백 저장' }))
+
+  expect(await within(form).findByRole('alert')).toHaveTextContent('피드백을 저장하지 못했습니다')
+  expect(within(form).getByLabelText('점수')).toHaveValue(88)
+  expect(within(form).getByLabelText('코멘트')).toHaveValue('입력 유지 확인')
+})
+
+test('blocks duplicate feedback submissions for the same applicant', async () => {
+  const applicant = createSeedApplicants(1)[0]!
+  const evaluation = applicant.evaluations![0]!
+  let patchCount = 0
+  let releaseRequest: (() => void) | undefined
+  server.use(http.patch('*/api/applicants/:applicantId/evaluations/:evaluationId', async () => {
+    patchCount += 1
+    await new Promise<void>((resolve) => { releaseRequest = resolve })
+    return HttpResponse.json({
+      ...applicant,
+      evaluations: [{
+        ...evaluation,
+        status: 'SUBMITTED',
+        score: 88,
+        comment: '중복 제출 방지',
+        submittedAt: '2026-09-08',
+      }],
+    })
+  }))
+  renderApp([applicant])
+  const table = await screen.findByRole('table', { name: '지원자 목록' })
+  fireEvent.click(within(table).getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
+
+  const form = screen.getByRole('form', { name: '서류검토 피드백' })
+  fireEvent.change(within(form).getByLabelText('점수'), { target: { value: '88' } })
+  fireEvent.change(within(form).getByLabelText('코멘트'), { target: { value: '중복 제출 방지' } })
+  fireEvent.click(within(form).getByRole('button', { name: '피드백 저장' }))
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(within(form).getByRole('button', { name: '저장 중' })).toBeDisabled()
+  fireEvent.submit(form)
+  await waitFor(() => expect(patchCount).toBe(1))
+
+  releaseRequest?.()
+  expect(await screen.findByRole('status')).toHaveTextContent('피드백을 저장했습니다')
+  expect(patchCount).toBe(1)
+})
