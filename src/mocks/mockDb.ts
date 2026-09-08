@@ -1,5 +1,5 @@
 import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position } from '../features/recruitment-board/model/applicant.types'
-import { STAGES } from '../features/recruitment-board/model/stages'
+import { applyStageTransition, getLocalDateString, STAGES, type StageTransitionOptions } from '../features/recruitment-board/model/stages'
 import { createSeedApplicants, SEED_POSITIONS } from './seedApplicants'
 import {
   DEFAULT_APPLICANT_SEED_SIZE,
@@ -38,6 +38,8 @@ function isApplicant(value: unknown): value is Applicant {
     && (applicant.evaluations === undefined || Array.isArray(applicant.evaluations))
     && (applicant.notes === undefined || Array.isArray(applicant.notes))
     && (applicant.timeline === undefined || Array.isArray(applicant.timeline))
+    && (applicant.rejectionReason === undefined || typeof applicant.rejectionReason === 'string')
+    && (applicant.rejectionMemo === undefined || typeof applicant.rejectionMemo === 'string')
   )
 }
 
@@ -106,7 +108,7 @@ export function resetApplicants(size = getApplicantSeedSize()) {
   return applicants
 }
 
-export function updateApplicantStage(applicantId: string, stage: ApplicantStage): Applicant {
+export function updateApplicantStage(applicantId: string, stage: ApplicantStage, transitionAt = getLocalDateString(), options?: StageTransitionOptions): Applicant {
   const storedApplicants = readStoredApplicants()
   const applicants = storedApplicants
     ? (storedApplicants.some(hasMissingWorkspaceFields) ? migrateWorkspaceFields(storedApplicants) : storedApplicants)
@@ -114,7 +116,7 @@ export function updateApplicantStage(applicantId: string, stage: ApplicantStage)
   const applicant = applicants.find(({ id }) => id === applicantId)
   if (!applicant) throw new Error(`Applicant not found: ${applicantId}`)
 
-  const updatedApplicant = { ...applicant, stage }
+  const updatedApplicant = applyStageTransition(applicant, stage, transitionAt, options)
   saveApplicants(applicants.map((current) => (current.id === applicantId ? updatedApplicant : current)))
   return updatedApplicant
 }

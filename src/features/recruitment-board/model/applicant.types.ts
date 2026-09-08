@@ -84,10 +84,16 @@ export interface Applicant {
   evaluations?: ApplicantEvaluation[]
   notes?: ApplicantNote[]
   timeline?: ApplicantTimelineEvent[]
+  rejectionReason?: string
+  rejectionMemo?: string
 }
 
 export interface MoveApplicantStageRequest {
   stage: ApplicantStage
+  transitionAt?: string
+  correction?: boolean
+  rejectionReason?: string
+  rejectionMemo?: string
 }
 
 export interface ApiErrorBody {

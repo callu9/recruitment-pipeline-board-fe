@@ -80,7 +80,8 @@ describe('loadApplicants', () => {
 
     updateApplicantStage('applicant-001', 'INTERVIEW')
 
-    expect(loadApplicants().find(({ id }) => id === 'applicant-001')?.stage).toBe('INTERVIEW')
+    expect(loadApplicants().find(({ id }) => id === 'applicant-001')).toMatchObject({ stage: 'INTERVIEW', nextAction: expect.any(String) })
+    expect(loadApplicants().find(({ id }) => id === 'applicant-001')?.timeline).toHaveLength(2)
     expect(JSON.parse(localStorage.getItem(performanceStorageKey) ?? '[]')).toHaveLength(1000)
     expect(localStorage.getItem(STORAGE_KEY)).toBe(defaultStorage)
   })

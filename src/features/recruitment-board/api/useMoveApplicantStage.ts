@@ -2,13 +2,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { applicantsQueryKey } from './useApplicantsQuery'
 import { moveApplicantOptimistically, replaceApplicant } from '../model/applicantCache'
-import type { Applicant, ApplicantStage } from '../model/applicant.types'
+import { getLocalDateString, type StageTransitionOptions } from '../model/stages'
+import type { Applicant, ApplicantStage, MoveApplicantStageRequest } from '../model/applicant.types'
 
-async function moveApplicantStage(applicantId: string, stage: ApplicantStage): Promise<Applicant> {
+type MoveVariables = { applicantId: string; targetStage: ApplicantStage; transitionAt: string } & StageTransitionOptions
+
+async function moveApplicantStage({ applicantId, targetStage, transitionAt, correction, rejectionReason, rejectionMemo }: MoveVariables): Promise<Applicant> {
   const response = await fetch(`/api/applicants/${applicantId}/stage`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stage }),
+    body: JSON.stringify({ stage: targetStage, transitionAt, correction, rejectionReason, rejectionMemo } satisfies MoveApplicantStageRequest),
   })
   if (!response.ok) throw new Error('단계 이동을 저장하지 못했습니다.')
 
@@ -16,22 +19,21 @@ async function moveApplicantStage(applicantId: string, stage: ApplicantStage): P
 }
 
 export function useMoveApplicantStage({ onError, onSuccess }: {
-  onError: () => void
+  onError: (applicant?: Applicant) => void
   onSuccess: (applicant: Applicant) => void
 }) {
   const queryClient = useQueryClient()
   const pendingIdsRef = useRef(new Set<string>())
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const mutation = useMutation({
-    mutationFn: ({ applicantId, targetStage }: { applicantId: string; targetStage: ApplicantStage }) =>
-      moveApplicantStage(applicantId, targetStage),
-    onMutate: async ({ applicantId, targetStage }) => {
+    mutationFn: moveApplicantStage,
+    onMutate: async ({ applicantId, targetStage, transitionAt, correction, rejectionReason, rejectionMemo }) => {
       await queryClient.cancelQueries({ queryKey: applicantsQueryKey })
       const previousApplicant = queryClient.getQueryData<Applicant[]>(applicantsQueryKey)?.find((applicant) => applicant.id === applicantId)
       if (!previousApplicant) return undefined
 
       queryClient.setQueryData<Applicant[]>(applicantsQueryKey, (current = []) =>
-        moveApplicantOptimistically(current, applicantId, targetStage),
+        moveApplicantOptimistically(current, applicantId, targetStage, transitionAt, { correction, rejectionReason, rejectionMemo }),
       )
       return { previousApplicant }
     },
@@ -41,7 +43,7 @@ export function useMoveApplicantStage({ onError, onSuccess }: {
           replaceApplicant(current, context.previousApplicant),
         )
       }
-      onError()
+      onError(context?.previousApplicant)
     },
     onSuccess: (updatedApplicant) => {
       queryClient.setQueryData<Applicant[]>(applicantsQueryKey, (current = []) => replaceApplicant(current, updatedApplicant))
@@ -57,12 +59,12 @@ export function useMoveApplicantStage({ onError, onSuccess }: {
     },
   })
 
-  function move(applicantId: string, targetStage: ApplicantStage) {
+  function move(applicantId: string, targetStage: ApplicantStage, options: StageTransitionOptions = {}) {
     if (pendingIdsRef.current.has(applicantId)) return
 
     pendingIdsRef.current.add(applicantId)
     setPendingIds((current) => new Set(current).add(applicantId))
-    mutation.mutate({ applicantId, targetStage })
+    mutation.mutate({ applicantId, targetStage, transitionAt: getLocalDateString(), ...options })
   }
 
   return { move, pendingIds }

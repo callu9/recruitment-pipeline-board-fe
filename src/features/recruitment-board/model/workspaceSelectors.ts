@@ -4,14 +4,23 @@ import type {
   ApplicantStage,
   Position,
 } from './applicant.types'
-
-export const WORKSPACE_TODAY = '2026-09-07'
+import { getLocalDateString, isTerminalStage, TERMINAL_STAGES } from './stages'
 
 function localDateValue(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
 
-export function getWorkspaceWeekDays(today = WORKSPACE_TODAY) {
+export { getLocalDateString }
+
+export function getWorkspaceHeaderLabel(today = getLocalDateString()) {
+  const [year, month, date] = today.split('-').map(Number)
+  const value = new Date(year, month - 1, date)
+  const weekday = value.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  const monthLabel = value.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  return `${weekday} · ${monthLabel} ${String(date).padStart(2, '0')}, ${year}`
+}
+
+export function getWorkspaceWeekDays(today = getLocalDateString()) {
   const [year, month, date] = today.split('-').map(Number)
   const start = new Date(year, month - 1, date)
   return Array.from({ length: 7 }, (_, index) => {
@@ -43,17 +52,15 @@ export interface CalendarEvent {
   label: string
 }
 
-const TERMINAL_STAGES: ApplicantStage[] = ['HIRED', 'REJECTED']
-
-export function isOverdue(applicant: Applicant, today = WORKSPACE_TODAY) {
-  return Boolean(applicant.dueDate && applicant.dueDate < today && !TERMINAL_STAGES.includes(applicant.stage))
+export function isOverdue(applicant: Applicant, today = getLocalDateString()) {
+  return Boolean(applicant.dueDate && applicant.dueDate < today && !isTerminalStage(applicant.stage))
 }
 
 export function hasPendingEvaluation(applicant: Applicant) {
   return (applicant.evaluations ?? []).some((evaluation) => evaluation.status === 'PENDING')
 }
 
-export function filterWorkspaceApplicants(applicants: Applicant[], filters: WorkspaceFilters) {
+export function filterWorkspaceApplicants(applicants: Applicant[], filters: WorkspaceFilters, today = getLocalDateString()) {
   const name = filters.name.trim().toLowerCase()
   return applicants.filter((applicant) => {
     if (name && !applicant.name.toLowerCase().includes(name)) return false
@@ -62,7 +69,7 @@ export function filterWorkspaceApplicants(applicants: Applicant[], filters: Work
     if (filters.stage !== 'ALL' && applicant.stage !== filters.stage) return false
     if (filters.positionId && applicant.positionId !== filters.positionId) return false
     if (filters.noSchedule && applicant.schedule) return false
-    if (filters.overdue && !isOverdue(applicant)) return false
+    if (filters.overdue && !isOverdue(applicant, today)) return false
     return true
   })
 }
@@ -74,21 +81,32 @@ export function getStageCounts(applicants: Applicant[]) {
   }, { DOCUMENT_REVIEW: 0, INTERVIEW: 0, OFFER: 0, HIRED: 0, REJECTED: 0 })
 }
 
-export function getTodayInterviews(applicants: Applicant[], today = WORKSPACE_TODAY) {
-  return applicants.filter((applicant) => applicant.schedule?.date === today)
+export function getTodayInterviews(applicants: Applicant[], today = getLocalDateString()) {
+  return applicants.filter((applicant) => !isTerminalStage(applicant.stage) && applicant.schedule?.date === today)
 }
 
 export function getMissingEvaluations(applicants: Applicant[]) {
-  return applicants.filter(hasPendingEvaluation)
+  return applicants.filter((applicant) => !isTerminalStage(applicant.stage) && hasPendingEvaluation(applicant))
 }
 
 export function getUnscheduledApplicants(applicants: Applicant[]) {
-  return applicants.filter((applicant) => applicant.stage === 'INTERVIEW' && !applicant.schedule)
+  return applicants.filter((applicant) => !isTerminalStage(applicant.stage) && applicant.stage === 'INTERVIEW' && !applicant.schedule)
+}
+
+export function getTodayActionableApplicants(applicants: Applicant[], today = getLocalDateString()) {
+  const queued = [
+    ...getTodayInterviews(applicants, today),
+    ...getMissingEvaluations(applicants),
+    ...applicants.filter((applicant) => isOverdue(applicant, today)),
+    ...getUnscheduledApplicants(applicants),
+  ]
+  return [...new Map(queued.map((applicant) => [applicant.id, applicant])).values()]
 }
 
 export function getCalendarEvents(applicants: Applicant[]): CalendarEvent[] {
   const events: CalendarEvent[] = []
   for (const applicant of applicants) {
+    if (isTerminalStage(applicant.stage)) continue
     const owner = applicant.owner ?? '미지정'
     if (applicant.schedule) {
       events.push({

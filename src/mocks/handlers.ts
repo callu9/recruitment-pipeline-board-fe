@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { canTransitionTo, STAGES } from '../features/recruitment-board/model/stages'
+import { canTransitionTo, getLocalDateString, STAGES } from '../features/recruitment-board/model/stages'
 import type { ApiErrorBody, MoveApplicantStageRequest } from '../features/recruitment-board/model/applicant.types'
 import { getApplicantSnapshot, loadApplicants, loadPositions, updateApplicantStage } from './mockDb'
 import { shouldMockApiFail, waitForMockDelay } from './mockConfig'
@@ -9,7 +9,12 @@ function error(status: number, code: ApiErrorBody['code'], message: string) {
 }
 
 function isMoveRequest(value: unknown): value is MoveApplicantStageRequest {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const body = value as Record<string, unknown>
+  return (body.transitionAt === undefined || (typeof body.transitionAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.transitionAt)))
+    && (body.correction === undefined || typeof body.correction === 'boolean')
+    && (body.rejectionReason === undefined || typeof body.rejectionReason === 'string')
+    && (body.rejectionMemo === undefined || typeof body.rejectionMemo === 'string')
 }
 
 function isStage(value: unknown): value is MoveApplicantStageRequest['stage'] {
@@ -46,12 +51,19 @@ export const handlers = [
     if (!applicant) {
       return error(404, 'NOT_FOUND', '지원자를 찾을 수 없습니다.')
     }
-    if (!canTransitionTo(applicant.stage, body.stage)) {
+    if (!body.correction && !canTransitionTo(applicant.stage, body.stage)) {
       return error(409, 'INVALID_TRANSITION', '현재 단계에서는 선택한 단계로 이동할 수 없습니다.')
+    }
+    if (body.stage === 'REJECTED' && !body.rejectionReason?.trim()) {
+      return error(400, 'INVALID_BODY', '불합격 사유를 입력해 주세요.')
     }
 
     if (shouldMockApiFail()) return error(503, 'MOCK_FAILURE', '지원자 단계를 저장하지 못했습니다.')
 
-    return HttpResponse.json(updateApplicantStage(params.applicantId as string, body.stage))
+    return HttpResponse.json(updateApplicantStage(params.applicantId as string, body.stage, body.transitionAt ?? getLocalDateString(), {
+      correction: body.correction,
+      rejectionReason: body.rejectionReason,
+      rejectionMemo: body.rejectionMemo,
+    }))
   }),
 ]

@@ -3811,3 +3811,61 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
   ```
 
 - 해시: `최종 동기화 대기`
+
+## [recruitment-workspace-hardening] 채용 운영 workspace hardening
+
+### 프롬프트 1 — 구현 및 개선 요청
+
+```text
+개선 지시해. 그리고 단게를 바꾸는 과정이 2가지 밖에 없잖아, 다음전형 진행이랑 불합격. 이거는 어떻게 개선하면 좋을지 알려줘
+```
+
+### 승인
+
+- 사용자 승인: `ㅇㅇ`
+- `PROMPT_LOG_SESSION_ID=01a07724-536a-7560-8494-f89d4fac9f6b`를 prompt-record reader에 전달했으나 해당 로그를 찾지 못했다. 사용자 제공 원문과 승인만 근거로 이 기록을 작성했으며, reader 출력 부재는 별도 제한으로 남긴다.
+
+### AI 출력 요지
+
+- Applicants 행과 상세에서 다음 목적지 전진·불합격만 명확히 제공하고, 최종합격·불합격과 상세 단계 정정에는 native 확인 흐름을 둔다. 불합격 사유는 필수이며 메모는 선택이다.
+- `applyStageTransition` 순수 전이로 stage·timeline·nextAction·rejection metadata를 함께 갱신하고, Query optimistic cache와 MSW/localStorage mock이 같은 domain transform을 사용한다. terminal 지원자는 Today actionable queues와 Calendar에서 제외하되 상세 history는 보존한다.
+- 실제 local date와 주입 가능한 순수 날짜 변환, 전체 Today 큐 렌더링·중복 제거 count, Applicants의 positions 오류/retry, 고유 accessible name과 native modal focus/inert/Escape/복귀를 구현하고 회귀 테스트를 추가했다.
+- Pages 배포는 PR/dev push의 lint/test/build 검증 job을 통과한 동일 dev push 뒤에만 실행하도록 단일 workflow로 정리했다.
+
+### 리뷰 / 검증
+
+#### 자동 검증
+
+- RED 단계에서 신규 date/transition/UI 계약 테스트가 구현 전 실패하는 것을 확인했다.
+- 최종 수정 후 `npm run lint` — 통과.
+- `npm run test -- --run` — 9개 파일, 90개 테스트 통과.
+- `npm run build` — 통과. Vite의 500kB 초과 chunk warning만 출력됐다.
+- `git diff --check` — 통과.
+
+#### 브라우저 검증
+
+- 개발 서버 데스크톱에서 실제 local header `TUE · SEP 08, 2026`, Applicants/Today/Calendar/Positions, 일반 전진의 optimistic 성공·실패 rollback/retry, 불합격 사유 필수·메모, terminal의 Today/Calendar 제거와 상세 timeline/rejection history 보존, positions 오류/retry를 확인했다.
+- 데스크톱 Today의 네 큐는 각각 표시 count와 실제 DOM 항목 수가 일치했고 8개 이후 항목을 숨기지 않았다. Calendar에서 terminal applicant의 미래 이벤트가 사라지는 것도 확인했다.
+- 실제 Chrome responsive 390px에서 상세 native dialog의 backdrop과 세로 레이아웃을 확인하고 Escape로 닫은 뒤 opener focus가 복귀하는 것을 확인했다. 콘솔에는 의도된 MSW 503/200 로그만 있었고 uncaught JavaScript error는 없었다.
+- 최종 후속 수정은 지원자별 실패 feedback 보존, Today unique actionable count, 현재 local date 기반 seed 일정, 일정 미정 chip의 applicant ID accessible name, 검증 후 배포 workflow로 반영했고 focused/full automated suite를 다시 실행했다.
+
+#### 독립 Luna/xhigh 검토
+
+- 독립 세션 `term_0f6f3c5b-7470-440c-b94b-5ff983383b3f`에서 `gpt-5.6-luna` + `xhigh`로 실제 unstaged diff와 관련 코드/테스트/workflow를 review-only 검사했다.
+- 유효한 지적은 workflow_run Pages trigger/권한 경계, 지원자 간 성공이 실패 feedback을 지우는 문제, Today count 의미, seed/runtime date 불일치, 일정 미정 고유 이름이었다. workflow를 동일 workflow의 `verify -> deploy needs`로 변경하고, feedback을 applicant ID별로 보존하며, actionable count/동적 seed date/고유 chip label을 추가한 뒤 90개 테스트로 재검증했다.
+- stage selector 복원과 일반 전이 확인 요구는 명시적 승인 UX(목적지 action과 일반 전이 직접 실행)에 반하므로 채택하지 않았다. HIRED START_DATE를 Calendar에 남기라는 지적도 terminal 지원자의 미래 Calendar 제거 acceptance와 반하므로 채택하지 않았다.
+- 독립 review 세션에서는 build와 browser 검증을 실행하지 않았고, reviewer가 실행한 lint는 통과했으나 당시 cross-applicant feedback 테스트는 실패했다. 그 valid finding을 수정한 뒤 이 세션에서 full lint/test/build와 browser smoke를 다시 실행했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(recruitment-workspace-hardening): harden recruitment workspace flows
+
+  - stage transition, terminal actions, history, and queue/calendar state를 동기화
+  - local date, positions retry, Today visibility, detail accessibility를 보강
+  - PR/dev verification과 검증된 revision의 Pages 배포 gate를 추가
+  ```
+
+- 해시: `최종 동기화 대기`

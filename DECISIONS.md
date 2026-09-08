@@ -132,3 +132,19 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 
 - post-review RED 테스트에서 UTC 주간 drift, legacy workspace field 누락, terminal focus 손실, misleading Today labels, raw position ID를 각각 재현했다.
 - 각 수정은 기존 Query cache source, pending guard, entity-only rollback, terminal-only confirmation 계약을 변경하지 않았다.
+
+## D-013. workspace hardening의 날짜·전이·검증 경계
+
+### 결정
+
+- 화면과 큐/캘린더 selector는 실제 local date를 사용하고, seed 생성기는 날짜를 인자로 받을 수 있으며 새 데이터의 기본값도 local date로 둔다. 이미 저장된 localStorage snapshot은 사용자의 데이터를 보존한다.
+- stage, timeline, nextAction, rejection metadata는 하나의 순수 `applyStageTransition` 결과로 함께 갱신하고, optimistic cache와 mock API가 같은 함수를 공유한다.
+- HIRED/REJECTED는 actionable Today 큐와 Calendar에서 제외하고, 상세의 기존 timeline과 일정 데이터는 보존한다. 단계 정정은 상세의 명시적 확인 흐름으로만 제공한다.
+- Today 탭 수는 네 큐의 중복을 제거한 actionable 지원자 수로 표시하고, 각 큐는 전체 항목을 렌더링한다.
+- Pull request와 dev push는 같은 검증 job에서 lint/test/build를 통과해야 하며, Pages 배포는 검증 job을 `needs`로 요구하는 dev push에서만 실행한다.
+
+### 이유
+
+- 날짜를 한 곳에서 고정하면 운영 화면이 시간이 지날수록 낡고, 날짜를 순수 함수 인자로 주면 테스트 결정성을 유지할 수 있다.
+- 전이 결과를 한 domain operation으로 만들면 서버 성공과 optimistic 상태가 timeline/nextAction을 서로 다르게 남기는 회귀를 막는다.
+- 배포를 동일 workflow의 검증 job 뒤에 두면 `workflow_run`의 기본 브랜치·권한·신뢰 경계 문제 없이 검증된 동일 revision만 Pages에 올라간다.
