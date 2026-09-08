@@ -3902,3 +3902,48 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
 
 - 예정 메시: `fix(recruitment-action-copy-retry): concise action copy와 applicants retry 복구`
 - 해시: 최종 동기화 대기
+
+## [prd-workspace-alignment] 현재 채용 운영 범위 PRD 동기화
+
+### 프롬프트 1 — 변경 범위와 PRD 필요성 확인
+
+```text
+이때까지 확장된 범위에 대해 어디가 바뀌었는지, 사용자 입장에서 어떤 게 달라졌는지 알려주고
+PRD 업데이트 필요한지 알려줘
+```
+
+### 프롬프트 2 — 병합 및 문서 반영 승인
+
+```text
+ㅇㅋ main <- dev 머지한 후에 PRD 변경사항은 바로 dev push
+```
+
+### AI 출력 요지
+
+- `dev`의 실제 화면, domain model, selectors, mock API, 테스트, README와 DECISIONS를 기존 PRD와 대조했다.
+- 다섯 컬럼 보드 중심 문서를 Applicants·Today·Calendar·Positions 네 탭의 채용 운영 workspace 기준으로 개정했다.
+- 지원자 표와 복합 필터, 운영 큐, 내부 주간 캘린더, 포지션 현황, 확장 상세, 단계 진행·불합격·정정, optimistic update와 재시도를 FR-01~FR-11로 정리했다.
+- 외부 캘린더·이메일·ERP, 일정·평가·메모·포지션 편집, 실제 권한·서버를 비목표로 분리하고 `입사` 필터와 terminal 제외 정책의 현재 불일치를 알려진 제한으로 기록했다.
+- 원본 과제는 `docs/ASSIGNMENT.md`에 그대로 보존하고 현재 PRD만 제품 기준 문서로 전환했다.
+
+### 리뷰 / 검증
+
+- `main`이 `dev`의 조상이고 양쪽 원격이 각각 로컬과 일치함을 확인한 뒤 `dev` 전체 90개 테스트를 통과시켰다.
+- `main`을 `0c7aeeb04126f9661336e4d723a6e698bb8d08cc`까지 fast-forward하고 병합 결과의 90개 테스트를 다시 통과시킨 뒤 `origin/main`에 push했다.
+- PRD 개정은 `dev`의 `src/App.tsx`, `applicant.types.ts`, `stages.ts`, `workspaceSelectors.ts`, mock handlers, 단계 mutation과 기존 13개 App 통합 테스트의 실제 동작을 근거로 작성했다.
+- 문서 변경 후 `npm run lint`, `npm run test`(9개 파일, 90개 테스트), `npm run build`, `git diff --check`가 통과했다. Build에는 기존 500kB 초과 chunk warning만 남았다.
+- 코드와 런타임 동작은 변경하지 않았다. 문서 범위이므로 별도 브라우저 검증은 반복하지 않았다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  docs(prd-workspace-alignment): 현재 채용 운영 범위 동기화
+
+  - 다섯 컬럼 보드 중심 PRD를 네 탭 workspace 요구사항으로 개정
+  - 단계 진행·불합격·정정과 확장 데이터·오류 복구 정책 반영
+  - 외부 연동·편집 기능과 현재 Calendar 제한을 명시
+  ```
+
+- 해시: `최종 동기화 대기`
