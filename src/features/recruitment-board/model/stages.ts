@@ -31,8 +31,9 @@ export function getLocalDateString(date = new Date()) {
 export function getForwardActionLabel(currentStage: ApplicantStage) {
   const destination = getAllowedNextStages(currentStage).find((stage) => stage !== 'REJECTED')
   if (!destination) return '종료됨'
-  if (destination === 'HIRED') return '최종합격 처리'
-  return `${stageLabel(destination)}${destination === 'OFFER' ? '로' : '으로'} 진행`
+  if (destination === 'HIRED') return '최종 합격'
+  if (destination === 'OFFER') return '처우 협의'
+  return '면접 집행'
 }
 
 export interface StageTransitionOptions {

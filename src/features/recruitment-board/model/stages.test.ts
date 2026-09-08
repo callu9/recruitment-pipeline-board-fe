@@ -19,9 +19,9 @@ test('rejects skipped, previous, and terminal-stage moves', () => {
 })
 
 test('derives destination action labels from the ordered stage policy', () => {
-  expect(getForwardActionLabel('DOCUMENT_REVIEW')).toBe('면접으로 진행')
-  expect(getForwardActionLabel('INTERVIEW')).toBe('처우협의로 진행')
-  expect(getForwardActionLabel('OFFER')).toBe('최종합격 처리')
+  expect(getForwardActionLabel('DOCUMENT_REVIEW')).toBe('면접 집행')
+  expect(getForwardActionLabel('INTERVIEW')).toBe('처우 협의')
+  expect(getForwardActionLabel('OFFER')).toBe('최종 합격')
 })
 
 test('formats a local date without making pure calendar transforms depend on the clock', () => {

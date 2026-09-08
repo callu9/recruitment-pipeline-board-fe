@@ -3869,3 +3869,36 @@ detail-feedback-redesign 작업 전 보고 내용(설계 및 브랜치 생성)�
   ```
 
 - 해시: `최종 동기화 대기`
+
+## [recruitment-action-copy-retry] concise action copy와 applicants retry 복구
+
+### 목표 / 수용 기준
+
+- 활성 단계 primary action의 visible/accessibility copy를 `면접 집행`, `처우 협의`, `최종 합격`으로 통일하고 secondary visible label `불합격`을 유지한다.
+- 초기 applicants GET 1회 실패 뒤 `다시 시도`를 누르면 실제 refetch가 호출되고 workspace가 성공 상태로 복귀한다.
+- retry 중 중복·취소 입력을 막되 mock API의 약 15% failure simulation과 자동 retry 없음 정책은 유지한다.
+
+### 프롬프트 1 — 사용자 승인 원문
+
+> 그리고 '면접으로 진행'이 너무 쓸데없는 말인 거 같아. '면접 집행'처럼 간단하게 써도 되잖아
+
+> 니가해줘
+
+### AI 출력 요지
+
+- 단계 정책의 공용 `getForwardActionLabel`을 수정해 세 primary action을 concise copy로 바꾸고, 기존 지원자 식별자 suffix accessible name과 `불합격` visible label을 보존했다.
+- applicants error UI에 local retry pending guard를 추가하고 `refetch({ cancelRefetch: false })`를 호출해 진행 중 버튼을 비활성화하고 `aria-busy`를 노출한다.
+- one-failure/one-success MSW 통합 테스트에 두 번째 GET 호출, retry pending 비활성화, workspace 복귀를 추가했다.
+
+### 리뷰 / 검증
+
+- 조사: production에서 보고된 반복 오류를 query error UI와 MSW request 흐름으로 추적했다. 기존 구현은 `refetch()` 자체는 호출했지만 retry 중 버튼이 활성 상태이고 요청 상태를 보존하지 않아 빠른 중복 입력이 진행 중 refetch를 취소할 수 있었다.
+- TDD RED: 새 exact label assertions는 기존 verbose copy 때문에 실패했고, retry regression은 기존 버튼이 refetch 중 disabled가 아니어서 실패했다.
+- 수정: 공용 action label helper와 error UI만 수정했으며, query 자동 retry/failure rate/dependency는 변경하지 않았다.
+- 독립 검토: `term_69117ac2-0116-421b-87f2-dd01527bfd36`에서 `gpt-5.6-luna` + `xhigh`로 실제 diff와 관련 테스트를 review-only 검사했다. reviewer는 retry 성공/비활성화는 확인했지만 중복 클릭 억제와 `aria-busy`를 직접 고정하지 않은 테스트 공백을 지적했고, production 코드 변경 없이 해당 assertions를 추가해 반영했다. reviewer가 실행한 lint/build/focused·full test는 통과했다.
+- 사용자 제공 PROMPT_LOG_SESSION_ID `01a07724-536a-7560-8494-f89d4fac9f6b`는 reader에서 해석하지 않았으므로 해당 session transcript는 미확인이다. 위 원문 두 줄만 사용자 제공 evidence로 기록했다.
+
+### 연결 커밋
+
+- 예정 메시: `fix(recruitment-action-copy-retry): concise action copy와 applicants retry 복구`
+- 해시: 최종 동기화 대기
