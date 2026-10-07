@@ -4010,3 +4010,173 @@ dev에서 워크트리 따서
   ```
 
 - 해시: 최종 동기화 대기
+
+## [applicants-workspace-ux] 지원자 탐색과 테이블 상호작용 개선
+
+### 프롬프트 1
+
+```text
+야 페이지네이션 어디갔어?
+```
+
+### 프롬프트 2
+
+```text
+페이지네이션 추가 작업 명세 작성해
+```
+
+### 프롬프트 3
+
+```text
+그 외에도 UIUX 개선점 제안해봐
+```
+
+### 프롬프트 4
+
+```text
+ㅇㅋ ui 개선은 shadcn, shadcn lint 활용해서 빠르게 구현하는 것까지 하여
+페이지네이션을 포함한 UIUX 개선 명세로 변경해서 다시 작성
+```
+
+### 프롬프트 5
+
+```text
+6.1 Sol High 새 세션 열어서 개선시켜
+```
+
+### 프롬프트 6
+
+```text
+네 딥링크 주고 완료 보고하라고 해
+```
+
+### 프롬프트 7
+
+```text
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:5173/recruitment-pipeline-board-fe/
+</in-app-browser-context>
+
+## My request:
+페이지당 표시는 테이블 상단에 있어야 편하지. 
+그리고 왜 인터뷰 일정 설정하는 화면도 없고 연결이 다 안 되잖아
+UIUX 고려 안 해? 사용자 흐름 생각 안 해?
+```
+
+### 프롬프트 8
+
+```text
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:5173/recruitment-pipeline-board-fe/
+</in-app-browser-context>
+
+## My request:
+너무 못생겼어... 개선 제안 좀 해봐
+```
+
+### 프롬프트 9
+
+```text
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:5173/recruitment-pipeline-board-fe/
+</in-app-browser-context>
+
+## My request:
+ㅇㅋ 개선하고
+**지원자 131님을 면접으로 이동했습니다. 이런 알림이 영역을 차지하는 거 맘에 안 들어 토스트로 뜨든가 해야지**
+그리고 행 선택 해서 상세 모달 띄우는데 지원자 이름을 눌러야지만 가능한 것도 너무 불편해 이것도 개선
+```
+
+### 프롬프트 10
+
+```text
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:5173/recruitment-pipeline-board-fe/
+</in-app-browser-context>
+
+## My request:
+페이지네이션 중앙에 놓든지 영역 개짝아서 개불편하네 ㅅㅂ
+```
+
+### 프롬프트 11
+
+```text
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:5173/recruitment-pipeline-board-fe/
+</in-app-browser-context>
+
+## My request:
+호버했을 때 행 색깔이 다르잖아. 니가 제대로 오케스트레이션 하고 있는 거 맞아?
+```
+
+### AI 출력 요지
+
+- 페이지네이션 명세를 shadcn 기반 UIUX 통합 명세로 확장하고, 사용자가 요청한 GPT-6.1 Sol High 구현 대화에 작업과 원래 대화로의 완료 보고를 전달했다. 구현과 검증 보고를 받은 뒤 원래 대화에서 실제 호버 결함을 재현하고 수정 결과를 독립 확인했다.
+- Applicants를 별도 컴포넌트로 분리하고 전체 Query cache에 필터→정렬→페이지 분할을 적용했다. 기본 20명과 20·50·100명 선택, 마지막 페이지 보정, 필터 초기화와 탭 왕복 맥락, 키보드 포커스 복귀를 연결했다.
+- 압축 요약, 검색·직무·정렬·접을 수 있는 추가 필터와 활성 조건 칩을 추가했다. 페이지당 표시는 테이블 위에, 80×44px 이전·다음 버튼은 테이블 아래 전체 너비 영역 중앙에 배치했다.
+- 일반 셀과 행 여백으로 상세를 열되 조작 요소와 텍스트 선택은 제외했다. 단계 결과는 지원자별 Sonner 토스트로 전환하고 native dialog 위에서도 하나의 알림 영역을 유지했다.
+- 필요한 shadcn 컴포넌트와 Tailwind v4, @shadcn/lint를 연결했다. 이름 고정 셀과 행 배경의 hover·selected·메뉴 열림 규칙을 통일했다.
+
+### 리뷰 / 검증
+
+#### 수정·기각한 초안
+
+- 하단의 페이지 크기 선택은 사용자 피드백에 따라 상단으로 옮겼다. 작은 페이지 탐색 영역은 중앙 정렬·최소 버튼 크기·간격을 명시해 수정했다.
+- 레이아웃을 차지하던 성공 안내와 이름 버튼만 가능한 상세 진입은 사용자가 거부해 토스트와 행 클릭으로 대체했다. 입력 오류와 조회 오류는 기존 위치에 유지했다.
+- native dialog 뒤에 가려지는 body 토스트는 실제 브라우저에서 확인해 단일 portal host를 최상위 dialog로 옮기는 방식으로 수정했다. 메뉴 Escape가 상세까지 닫던 회귀는 defaultPrevented 확인과 통합 테스트로 수정했다.
+- 앞선 정적 화면 검수가 일반 행의 반투명 hover와 불투명 고정 셀의 불일치를 놓쳤다. 사용자의 지적을 원래 대화에서 재현했고, 행에 불투명 배경을 부여해 고정 셀이 상속하도록 수정했다. 이름 버튼의 별도 배경과 행 배경 transition을 제거했다.
+- 미사용 생성 의존성·폰트·animation utility를 제거하고 기존 상태·API·단계 정책을 유지했다. 일정 관리까지 완료했다는 해석은 채택하지 않았다.
+
+#### 자동 검증
+
+- 구현 대화의 최종 보고: npm run lint 통과(경고 0), npm run test 9개 파일·145개 테스트 통과(32.39초), npm run build 통과(JS 855.25kB/gzip 294.60kB). 기존 500kB 초과 번들 경고는 남아 있다.
+- 순수 정렬·페이지 경계, 필터·정렬 변경과 탭 맥락, 마지막 페이지 보정·실패 복원, 동일 지원자 동시 이동 방지, 포커스, 행 클릭 제외 조건, 지원자별 토스트 실패·성공·만료와 단일 live region을 테스트했다.
+- shadcn 디자인 규칙 위반 fixture의 오류 검출을 확인하고 fixture는 제거했다. 실제 강제 실패와 타이머 동작은 MSW 통합 테스트 근거이며 실서비스 실행 결과가 아니다.
+
+#### 브라우저 검증과 한계
+
+- 구현 대화는 로컬 MSW 앱에서 1440·768·390px의 페이지 조작, 필터·정렬·칩, 행·키보드 상세 진입, 메뉴와 확인·상세의 Escape/포커스, dialog 위 토스트, 가로 스크롤을 확인했다. 페이지 버튼은 80×44px, 간격 8px, 상하 여백 16px, 중앙 오차 0.01px 미만으로 보고했다.
+- 원래 대화는 별도 탭의 실제 앱에서 일반 셀과 이름 위 hover, 메뉴가 열린 행의 포인터 이탈, 기본색 복귀 및 헤더 hover 제외를 직접 확인했다. 행과 고정 셀의 렌더 색은 모두 rgb(241,244,248), 이름 버튼은 투명, 배경 transition은 0초였다.
+- selected 및 세 화면 폭의 추가 검증은 API·저장소 호출 없는 실제 ApplicantsView 임시 fixture에서 수행했다. 기본·hover·selected 색과 가로 스크롤의 일치를 computed style로 확인했으며 fixture는 제거했다.
+- 전체 PNG 픽셀 비교는 캡처 배율/clip 문제로 실패해 검증 통과로 세지 않았다. 대표 390px 이미지는 별도로 확보했다. 실제 배포, 스크린리더 음성, 브라우저 강제 실패는 확인하지 않았다. 브라우저 확인에는 실패율 0의 로컬 개발 override를 사용했고 기본 mock의 15% 실패 계약은 유지했다.
+- 면접/처우 일정 입력·변경 API와 선행조건, 작성 중 보호, 나머지 상세·Calendar 개선은 후속 scope다.
+
+#### 게시 요청과 기록 경계
+
+- 사용자는 수정 후보와 위 한계를 보고받은 뒤 PR 게시를 요청했다. 이를 현재 범위의 기록·커밋·push·PR 생성 요청으로 처리하며, 별도의 사용자 수동 테스트 통과를 주장하지 않는다.
+- 이번 기록은 지정된 원래 대화의 prompt reader stdout만 사용했다. 다른 대화의 사용자 프롬프트 로그나 이전 scope 기록은 수정하지 않았다.
+- 기록 후 prompt-record 계약 테스트 5개가 통과했다. 현재 범위 공백 검사도 통과했으며, PROMPTS의 사용자 원문에 포함된 행 끝 공백 한 곳은 원문 보존을 위해 blank-at-eol 검사만 제외했다. 기존 AGENTS.md 변경은 이번 범위에서 제외했다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  feat(applicants-workspace-ux): 지원자 탐색과 테이블 상호작용 개선
+
+  - shadcn 기반 필터·정렬·페이지 탐색과 상단 표시 수 선택 추가
+  - 행 상세 진입과 dialog 위 지원자별 결과 토스트 연결
+  - 페이지 버튼 영역과 고정 셀 hover 일관성 개선 및 검증 기록
+  ```
+
+- 해시: 최종 동기화 대기

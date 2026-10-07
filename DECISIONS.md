@@ -183,3 +183,63 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 
 - 여러 평가자의 독립 제출, 승인, draft, 첨부 파일은 구현하지 않는다.
 - 피드백과 일정에 따른 정상 전진 gate는 `[stage-scheduling]` scope에서 연결한다.
+
+## D-016. shadcn 기반 UIUX 개선과 클라이언트 페이지네이션 — 설계 제안
+
+### 상태와 근거
+
+- 2026-10-07 사용자 요청으로 페이지네이션 단독 명세를 UIUX 통합 명세로 확장했다.
+- shadcn/ui와 shadcn lint 활용은 사용자 지정이다. 세부 UX·규칙 정책은 검토용 제안이며 설치·구현·사용자 검증 전이다.
+- 상세 기준: [UIUX 개선 명세](docs/superpowers/specs/2026-10-07-workspace-uiux-improvement-design.md).
+
+### 제안
+
+- 전체 Query cache에 필터·정렬을 적용한 뒤 표시 행만 나눈다. 기본 20명, 20·50·100명 선택과 이전·다음 이동을 제공한다.
+- 필터·정렬 변경은 1페이지, 단순 업무 탭 왕복은 탐색 맥락을 유지한다. 마지막 페이지 보정 후 실패 rollback은 엔티티만 복원하고 보정된 페이지를 유지한다.
+- shadcn/ui + Tailwind v4를 필요한 화면부터 도입하고 @shadcn/lint를 기존 ESLint에 연결한다. 디자인 규칙 적용 경로·component 예외를 명시하고 위반 예제로 검출을 확인한다.
+- 입력 보호·작업 위치 결과·상세·가독성·캘린더를 기능별 scope로 구현한다. 상세와 확인은 같은 Radix overlay 계열로 전환하고 기존 focus·Escape 계약을 검증한다.
+- 다음 행동·일정 입력은 기존 stage-scheduling 설계로 이어서 실제 API까지 연결한다. mock 데이터 정리를 자동으로 포함하지 않는다.
+
+### 이유와 트레이드오프
+
+- 검증 가능한 기본 컴포넌트와 lint 수정 루프로 UI 제작 시간을 줄인다. 의존성 없는 구현이라는 이전 초안의 제약은 이번 사용자 요청에 따라 대체한다.
+- 초기 Tailwind·alias·lint 통합과 기존 CSS 충돌 검증 비용은 필요하다. 전체 CSS 재작성·전역 store·테이블 엔진은 추가하지 않는다.
+- 전체 조회 비용은 남으며 성능 목표 달성을 별도로 주장하지 않는다. 디자인 lint 통과는 접근성·업무 흐름·실제 브라우저 검증을 대체하지 않는다.
+
+### applicants-pagination 구현 후보
+
+- 사용자가 통합 명세 이후 구현을 요청해 §3·§4를 첫 scope로 채택했다. 현재 사용자 검증·기록·커밋 전 후보이며 나머지 UIUX scope는 구현하지 않았다.
+- shadcn CLI `4.21.3` (init `--base radix --preset nova`)로 다섯 컴포넌트를 생성하고 `@shadcn/lint 0.2.0`, Tailwind `4.3.3`을 고정했다. 기존 밝은 배경·파란 primary와 system font를 유지한다.
+- CLI가 추가한 Geist 폰트, 미사용 animation CSS와 shadcn CLI 런타임 패키지·cn 재수출 helper는 제거했다. 현재 생성 소스가 사용하는 cn/CVA/Radix/lucide만 유지한다. 컴포넌트 추가는 동일 CLI 버전의 npx로 실행할 수 있다.
+- 페이지를 결과에 즉시 보정하고 state에도 저장해 실패 복원 후 과거 페이지로 되돌아가지 않게 한다. filter 이벤트에서 1페이지를 설정해 같은 인원수의 다른 검색도 초기화한다.
+- 제목 fallback은 현재 modal과 다른 컨트롤의 유효한 focus를 보존한다. 현재 단계 버튼을 ApplicantsView에 함께 옮겨 상세와 중복 구현하지 않는다. 상세/확인은 이 scope에서 native dialog를 유지한다.
+- lint 적용 경로는 새 제품 UI와 생성 UI 정의로 한정한다. 정의 내부의 세 규칙 예외는 공식 가이드에 따른 것이며 기존 React/TypeScript 규칙을 해제하지 않는다. 생성된 미사용 variant export는 제거해 Fast Refresh warning을 피한다.
+
+### 사용자 흐름 피드백에 따른 후보 수정과 우선순위
+
+- 2026-10-07 사용자는 하단 페이지 크기 선택의 불편과 면접 일정 입력·업무 연결 부재를 지적했다. 기존 후보 승인으로 해석하지 않는다.
+- 페이지당 표시·전체 결과·표시 범위를 단계 필터 아래·첫 행 위로 옮기고 하단은 이전/다음·현재 페이지로 유지한다. 하단에 모두 두었던 제안은 표시 수 조작에 불필요한 스크롤을 요구해 기각했다.
+- 현재 pagination gate 이후 다음 scope를 `stage-scheduling`으로 올린다. 피드백→면접/처우 일정 등록→단계 진행→Applicants/Today/Calendar 반영을 필터·정렬·overlay 전환·가독성·캘린더 탐색 폴리시보다 먼저 구현한다.
+- 현재 일정은 읽기 전용 `InterviewSchedule`이고 일정 PUT, form 진입점, 상태 기반 action, 정상 전진의 피드백/일정 선행조건 검사가 없다. 현재 후보를 사용자 흐름 개선 완료라고 부르지 않는다.
+- 기존 피드백 API/form/cache 병합과 개별 stage rollback을 재사용한다. 일정 종류/담당자 모델, legacy 일정 보존과 nextAction migration 정리, 등록/변경·담당자 일정 확인·실패 입력 유지/재시도·서버 gate·세 탭 반영의 다음 작업은 통합 명세 §6.1에 준비했다. 데이터 reset과 가짜 action 버튼은 추가하지 않는다.
+
+## D-017. 현재 후보를 applicants-workspace-ux로 확장하고 Sonner로 결과 안내
+
+- 2026-10-07 사용자의 추가 요청으로 현재 미커밋 pagination 후보에 압축 지표, 필터·정렬·칩, 행 상세 진입, 한국어 nav, outline 전진/불합격 메뉴, 중앙 footer와 Sonner를 포함한다. scope 이름은 `applicants-workspace-ux`, 브랜치는 이미 작업 중인 `feat/applicants-pagination`을 유지한다. 이 요청은 최종 검증·stage·commit 승인이 아니다.
+- D-010의 toast/자동 닫힘 타이머 제외와 통합 명세의 inline mutation 배너 정책은 이 명시적 요청으로 대체한다. [공식 shadcn Sonner](https://ui.shadcn.com/docs/components/radix/sonner)를 사용하며 deprecated Toast를 추가하지 않는다. 성공 4초, 단계 실패 Infinity·수동 닫기/동일 지원자 재시도 성공 해제로 구분한다. form 실패와 query 실패는 원래 위치에 남긴다.
+- 단일 Sonner live region과 작업·지원자별 toast ID로 A 실패/B 성공의 독립성을 유지한다. 기본 body Toaster가 native dialog 뒤에 가리는 것을 실제 브라우저의 hit test로 확인했다. 같은 portal host를 현재 최상위 dialog로 옮겨 Toaster를 재마운트하거나 결과를 중복 낭독하는 별도 배너를 만들지 않는다.
+- 레지스트리가 추가한 next-themes와 실제 생성되지 않는 animation utility는 제거했다. 테마는 기존 light token을 사용한다. 반복적인 UI 색 변경은 Button/Table variant·정의 안에서 처리해 제품 UI의 shadcn lint를 우회하지 않는다.
+- 첫 desktop 측정에서 footer gap이 registry 기본 2px로 남은 것을 발견해 8px로 수정했다. footer는 Table 스크롤 밖 전체 너비·중앙 정렬, 버튼 80×44px, 상하 16px를 기준으로 검증한다.
+- 다음 최우선은 여전히 `stage-scheduling`이다. 일정 모델/API/form/선행조건은 이번 scope에서 구현하지 않는다. 남은 상세 입력 보호·Calendar 탐색·다른 탭 가독성도 완료로 기록하지 않는다.
+
+### applicants-workspace-ux hover 회귀 수정 — 사용자 재검증 전
+
+- 사용자 지적으로 일반 행 hover의 `bg-muted/50`와 sticky 셀의 `bg-muted` 불일치, selected 이름 버튼의 독립 hover 배경을 실제 브라우저에서 재현했다. 앞선 후보 검증이 이 포인터 상태를 놓쳤다.
+- TableRow가 기본/hover·메뉴 열림/selected의 불투명 배경을 소유한다. selected가 다른 상태보다 우선하도록 hover·expanded selector에서 selected를 제외한다. sticky head/cell은 bg-inherit, 이름 버튼은 투명 배경을 사용한다. 행 배경 transition을 제거해 별도 셀의 상태 변경 시차를 없앤다. header hover는 적용하지 않으며 다른 액션 Button의 hover/focus는 유지한다.
+- API/저장소 호출 없는 실제 ApplicantsView 임시 fixture에서 실제 viewport 1440/768/390을 assert하며 이름·일반 셀·메뉴 포인터, selected, 메뉴 열림 후 포인터 이탈, 768/390 가로 스크롤의 computed 렌더 색을 확인했다. 부모 세션도 일반 화면의 일반/name/expanded hover·기본색 복귀·header를 독립 확인했다. 임시 fixture는 제거했다.
+- raw CDP PNG의 배율/기본 clip이 CSS 좌표와 달라 전체 픽셀 assertion은 실패했다. 이를 통과로 보고하지 않는다. CSS clip을 명시한 대표 390px PNG만 정상 캡처했다. 추가 탐색 중단 요청에 따라 나머지 raster 검증은 미확인으로 남긴다. 앞서 부모 viewport 조작을 원인으로 추정한 표현은 철회한다.
+- 최종 lint 통과, test 9파일145개 통과(32.39s), build 통과(JS855.25kB, >500kB 경고 유지), scope diff check 통과. 사용자 승인·PROMPTS 기록·staging·commit은 아직 없다.
+
+### PR 게시 요청 — 2026-10-07
+
+- 사용자가 수정 후보와 검증 한계를 보고받은 뒤 PR 게시를 요청했다. 현재 applicants-workspace-ux 범위의 기록·커밋·push·PR 생성을 진행한다. 별도의 사용자 수동 검증 결과는 보고되지 않았으며, 위 미확인 항목과 stage-scheduling 후속 범위를 유지한다.
