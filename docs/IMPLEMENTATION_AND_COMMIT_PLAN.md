@@ -9,6 +9,17 @@
 - 커밋 후 squash, amend 남용, force-push를 하지 않는다.
 - 실수나 수정 커밋도 의미가 있으면 남기고, 무엇을 왜 고쳤는지 설명한다.
 
+### 현재 후속 우선순위 (2026-10-07 사용자 수정 요청)
+
+사용자가 현재 미커밋 후보를 `applicants-workspace-ux`로 확장했다. 기존 `feat/applicants-pagination` 브랜치를 유지하고 페이지네이션·압축 요약·필터/정렬·행 상세 진입·Sonner·footer 개선을 같은 검증 gate로 묶는다. 사용자 피드백은 검증 승인이 아니다. 검증·prompt-record·현재 scope staging·명시적 commit 이후 순서는 다음과 같다.
+
+1. `stage-scheduling`: 피드백 작성 → 면접/처우 일정 등록·변경 → 선행조건 검사 → 단계 진행 → Applicants/Today/Calendar 반영을 우선 연결한다.
+2. `applicant-detail-workflow`: 작성 중 보호·overlay 전환·정보 순서.
+3. `workspace-readability`: 다른 탭의 남은 가독성·평가/상대 날짜 문구.
+4. `calendar-navigation`.
+
+구체적인 현재 모델 차이·파일·검증은 [통합 명세 §6.1](superpowers/specs/2026-10-07-workspace-uiux-improvement-design.md)에 준비했다. 아래 기존 commit 목록은 구현 이력/기준이며 재작성하지 않는다. 일정 흐름 완료로 표시하거나 문구만 있는 버튼을 먼저 추가하지 않는다.
+
 ### 요구사항 추적성
 
 | 과제 원문 | PRD | TECH_SPEC | 구현 커밋 | 관련 결정 | README |

@@ -2,6 +2,8 @@ import { expect, test } from 'vitest'
 import { createSeedApplicants, SEED_POSITIONS } from '../../../mocks/seedApplicants'
 import {
   filterWorkspaceApplicants,
+  paginateApplicants,
+  sortWorkspaceApplicants,
   getCalendarEvents,
   getPositionSummaries,
   getStageCounts,
@@ -65,4 +67,49 @@ test('creates typed calendar events and position counts without mutating source 
   expect(new Set(events.map((event) => event.type))).toEqual(new Set(['INTERVIEW', 'EVALUATION', 'OFFER']))
   expect(summaries.every((position) => position.applicantCount >= position.hiredCount)).toBe(true)
   expect(applicants[0]?.stage).toBe('DOCUMENT_REVIEW')
+})
+
+
+test.each([0, 1, 20, 21, 240])('paginates %i applicants with valid ranges and no source changes', (size) => {
+  const applicants = createSeedApplicants(size)
+  const original = structuredClone(applicants)
+  const result = paginateApplicants(applicants, 1, 20)
+  expect(result).toEqual({ items: applicants.slice(0, 20), page: 1, totalPages: Math.ceil(size / 20), total: size, from: size ? 1 : 0, to: Math.min(20, size) })
+  expect(applicants).toEqual(original)
+  result.items.forEach((item, index) => expect(item).toBe(applicants[index]))
+})
+
+test.each([20, 50, 100] as const)('visits every ID once with page size %i and clamps page bounds', (pageSize) => {
+  const applicants = createSeedApplicants(240)
+  const totalPages = Math.ceil(applicants.length / pageSize)
+  const visited = Array.from({ length: totalPages }, (_, index) => paginateApplicants(applicants, index + 1, pageSize).items).flat()
+  expect(visited.map(({ id }) => id)).toEqual(applicants.map(({ id }) => id))
+  expect(new Set(visited.map(({ id }) => id)).size).toBe(240)
+  expect(paginateApplicants(applicants, -2, pageSize).page).toBe(1)
+  const last = paginateApplicants(applicants, 999, pageSize)
+  expect(last.page).toBe(totalPages)
+  expect(last.to).toBe(240)
+  expect(last.from).toBe((totalPages - 1) * pageSize + 1)
+  expect(last.items).toHaveLength(pageSize === 20 ? 20 : 40)
+  expect(paginateApplicants([], 999, pageSize)).toEqual({ items: [], page: 1, totalPages: 0, total: 0, from: 0, to: 0 })
+})
+
+const sortIds = (items: ReturnType<typeof createSeedApplicants>, sort: 'APPLIED' | 'DUE' | 'OVERDUE') => sortWorkspaceApplicants(items, sort, '2026-10-07').map(({ id }) => id)
+
+test('sorts latest applications with deterministic ID ties without mutating source', () => {
+  const items = createSeedApplicants(3).map((item, i) => ({ ...item, id: ['b', 'a', 'c'][i], appliedAt: ['2026-10-01', '2026-10-01', '2026-10-03'][i] }))
+  const before = structuredClone(items)
+  expect(sortIds(items, 'APPLIED')).toEqual(['c', 'a', 'b'])
+  expect(items).toEqual(before)
+  expect(sortWorkspaceApplicants([], 'APPLIED')).toEqual([])
+})
+
+test('sorts active deadlines first, then no date and terminal applicants by application and ID', () => {
+  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), stage: i === 3 ? 'HIRED' as const : 'DOCUMENT_REVIEW' as const, appliedAt: ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-03'][i], dueDate: ['2026-10-09', '2026-10-08', undefined, '2026-10-01', '2026-10-08'][i] }))
+  expect(sortIds(items, 'DUE')).toEqual(['1', '4', '0', '3', '2'])
+})
+
+test('overdue priority excludes today, missing dates and terminal stages', () => {
+  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), stage: i === 3 ? 'REJECTED' as const : 'INTERVIEW' as const, appliedAt: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'][i], dueDate: ['2026-10-06', '2026-10-01', '2026-10-07', '2026-10-01', undefined][i] }))
+  expect(sortIds(items, 'OVERDUE')).toEqual(['1', '0', '4', '3', '2'])
 })

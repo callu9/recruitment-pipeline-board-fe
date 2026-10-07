@@ -1,4 +1,24 @@
+@import "tailwindcss";
+
 :root {
+  --background: var(--color-surface);
+  --foreground: var(--color-text);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text);
+  --primary: #2864dc;
+  --primary-foreground: #fff;
+  --secondary: #e8f0ff;
+  --secondary-foreground: #245ac7;
+  --muted: var(--color-control-hover);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-control-hover);
+  --accent-foreground: var(--color-text);
+  --destructive: #b33d3d;
+  --border: var(--color-border);
+  --input: var(--color-border-strong);
+  --ring: var(--color-focus);
+  --radius: 0.625rem;
+
   --color-canvas: #f6f8fb;
   --color-surface: #fff;
   --color-text: #172033;
@@ -33,3 +53,38 @@
 body {
   margin: 0;
 }
+
+@theme inline {
+  --font-sans: var(--font-family-sans);
+  --color-background: var(--background);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  /* Retain headings and native dialog placement that preflight resets. */
+  h1 { font-size: 2em; font-weight: bold; }
+  h2 { font-size: 1.5em; font-weight: bold; }
+  h3 { font-size: 1.17em; font-weight: bold; }
+  strong { font-weight: bold; }
+  dialog { margin: auto; }
+}
+
+/* Sonner variables belong to the theme rather than inline component styles. */
+[data-sonner-toaster] { --normal-bg: var(--background); --normal-text: var(--foreground); --normal-border: var(--border); --border-radius: var(--radius); }

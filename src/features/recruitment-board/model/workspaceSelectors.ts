@@ -40,6 +40,39 @@ export interface WorkspaceFilters {
   positionId: string
 }
 
+export const EMPTY_FILTERS: WorkspaceFilters = { name: '', role: 'ALL', owner: 'ALL', stage: 'ALL', noSchedule: false, overdue: false, positionId: '' }
+
+export type ApplicantPageSize = 20 | 50 | 100
+
+export type ApplicantSort = 'APPLIED' | 'DUE' | 'OVERDUE'
+
+export function sortWorkspaceApplicants(applicants: Applicant[], sort: ApplicantSort, today = getLocalDateString()) {
+  const applied = (a: Applicant, b: Applicant) => b.appliedAt.localeCompare(a.appliedAt) || a.id.localeCompare(b.id)
+  return [...applicants].sort((a, b) => {
+    if (sort === 'APPLIED') return applied(a, b)
+    const aPriority = sort === 'DUE' ? Boolean(a.dueDate && !isTerminalStage(a.stage)) : isOverdue(a, today)
+    const bPriority = sort === 'DUE' ? Boolean(b.dueDate && !isTerminalStage(b.stage)) : isOverdue(b, today)
+    return Number(bPriority) - Number(aPriority)
+      || (aPriority && bPriority ? a.dueDate!.localeCompare(b.dueDate!) : 0)
+      || applied(a, b)
+  })
+}
+
+export function paginateApplicants(applicants: Applicant[], page: number, pageSize: ApplicantPageSize) {
+  const total = applicants.length
+  const totalPages = Math.ceil(total / pageSize)
+  const validPage = Math.min(Math.max(page, 1), Math.max(totalPages, 1))
+  const start = (validPage - 1) * pageSize
+  return {
+    items: applicants.slice(start, start + pageSize),
+    page: validPage,
+    totalPages,
+    total,
+    from: total ? start + 1 : 0,
+    to: Math.min(start + pageSize, total),
+  }
+}
+
 export interface CalendarEvent {
   id: string
   applicantId: string
