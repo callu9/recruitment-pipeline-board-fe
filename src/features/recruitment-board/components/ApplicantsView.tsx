@@ -1,3 +1,4 @@
+import { formatWorkspaceDueDate } from '../model/workspaceSelectors'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { EllipsisIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,8 @@ export function StageActionButtons({ applicant, isPending, onMove, onReject }: {
   </div>
 }
 
-export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortChange, onPageChange, onPageSizeChange, headingRef, hasOpenDialog, filters, setFilters, onSelect, selectedId, pendingIds, onMove, onReject, positions, positionsError, refetchPositions, today }: {
+export function ApplicantsView({ emptyContext = 'applicants', applicants, pagination, pageSize, sort, onSortChange, onPageChange, onPageSizeChange, headingRef, hasOpenDialog, filters, setFilters, onSelect, selectedId, pendingIds, onMove, onReject, positions, positionsError, refetchPositions, today }: {
+  emptyContext?: 'applicants' | 'archive'
   applicants: Applicant[]
   pagination: ReturnType<typeof paginateApplicants>
   pageSize: ApplicantPageSize
@@ -119,7 +121,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
       <p className="text-sm text-muted-foreground" role="status" aria-label="지원자 페이지 상태">총 {pagination.total}명{pagination.total > 0 && <> · {pagination.from}–{pagination.to}명<span className="sr-only"> · {pagination.page} / {pagination.totalPages} 페이지</span></>}</p>
       {pagination.total > 0 && <label className="flex items-center gap-2 text-sm"><span className="sr-only">페이지당 표시</span><NativeSelect value={pageSize} onChange={(event) => { const size = Number(event.target.value); if (size === 20 || size === 50 || size === 100) onPageSizeChange(size) }}>{([20, 50, 100] as const).map((size) => <NativeSelectOption key={size} value={size}>{size}명씩 보기</NativeSelectOption>)}</NativeSelect></label>}
     </div>
-    {pagination.total === 0 ? <div className="grid min-h-64 content-center justify-items-center gap-3 rounded-lg border bg-background p-6 text-center"><h3>조건에 맞는 지원자가 없습니다.</h3><p className="text-sm text-muted-foreground">검색어나 필터를 초기화해 다시 확인하세요.</p><Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>필터 초기화</Button></div> : <>
+    {pagination.total === 0 ? <div className="grid min-h-64 content-center justify-items-center gap-3 rounded-lg border bg-background p-6 text-center"><h3>{applicants.length === 0 ? emptyContext === 'archive' ? '아직 보관된 지원자가 없습니다.' : '등록된 지원자가 없습니다.' : '조건에 맞는 지원자가 없습니다.'}</h3><p className="text-sm text-muted-foreground">{applicants.length === 0 ? emptyContext === 'archive' ? '지원자 상세의 보관·복원에서 종료 기록을 보관하거나 인재풀에 등록하면 여기에 표시됩니다.' : '지원 접수 또는 가져오기로 채용 운영을 시작하세요.' : '검색어나 필터를 초기화해 다시 확인하세요.'}</p>{applicants.length > 0 && <Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>필터 초기화</Button>}</div> : <>
       <div className="rounded-lg border bg-background" onFocusCapture={(event) => { focusedRowControl.current = event.target as HTMLElement }}>
         <Table className="min-w-4xl"><caption className="sr-only">지원자 목록</caption>
           <TableHeader><TableRow><TableHead scope="col" sticky>지원자</TableHead><TableHead scope="col">단계</TableHead><TableHead scope="col">담당자</TableHead><TableHead scope="col">다음 액션</TableHead><TableHead scope="col">일정</TableHead><TableHead scope="col"><span className="sr-only">액션</span></TableHead></TableRow></TableHeader>
@@ -130,7 +132,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
             <TableCell sticky><Button data-applicant-trigger type="button" variant="applicant" size="applicant" aria-label={`지원자 상세 보기: ${applicantName(applicant)}`} aria-pressed={selectedId === applicant.id} onClick={(event) => onSelect(applicant.id, event.currentTarget)}><span className="grid min-w-0 gap-1"><strong>{applicant.name}</strong><span className="truncate text-xs text-muted-foreground">{applicant.role} · 지원 {dateLabel(applicant.appliedAt)}</span></span></Button></TableCell>
             <TableCell><Badge variant={applicant.stage === 'REJECTED' ? 'destructive' : applicant.stage === 'HIRED' ? 'outline' : 'secondary'}>{STAGES.find(({ code }) => code === applicant.stage)?.label}</Badge></TableCell>
             <TableCell>{applicant.owner ?? '미지정'}</TableCell>
-            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{applicant.nextAction ?? '없음'}</span><small className="block text-xs text-muted-foreground">{dateLabel(getWorkDueDates(applicant)[0])}</small></TableCell>
+            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{applicant.nextAction ?? '없음'}</span><small className="block text-xs text-muted-foreground">{formatWorkspaceDueDate(getWorkDueDates(applicant)[0], isRecruiting(applicant), today)}</small></TableCell>
             <TableCell>{isCurrentInterviewSchedule(applicant) && applicant.schedule ? <><strong>{dateLabel(applicant.schedule.date)}</strong><small className="block text-xs text-muted-foreground">{applicant.schedule.startTime} · {applicant.schedule.format === 'VIDEO' ? '화상' : '대면'}</small></> : <span className="text-muted-foreground">미정</span>}</TableCell>
             <TableCell><StageActionButtons applicant={applicant} isPending={pendingIds.has(applicant.id)} onMove={(stage, trigger) => onMove(applicant, stage, trigger)} onReject={(trigger) => onReject(applicant, trigger)} /></TableCell>
           </TableRow>)}</TableBody>

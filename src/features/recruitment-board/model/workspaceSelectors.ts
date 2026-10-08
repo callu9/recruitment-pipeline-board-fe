@@ -221,3 +221,16 @@ export function getPositionSummaries(positions: Position[], applicants: Applican
     }
   })
 }
+
+export function formatWorkspaceDate(value?: string) {
+  return value ? getLocalDateString(value).replaceAll('-', '.') : '미정'
+}
+
+export function formatWorkspaceDueDate(value: string | undefined, active: boolean, today = getLocalDateString()) {
+  const absolute = formatWorkspaceDate(value)
+  if (!value || !active) return absolute
+  const day = (date: string) => { const [y, m, d] = getLocalDateString(date).split('-').map(Number); return Date.UTC(y, m - 1, d) / 86400000 }
+  const delta = day(value) - day(today)
+  const urgency = delta === 0 ? '오늘 마감' : delta === 1 ? '내일 마감' : delta < 0 ? `${-delta}일 지연` : ''
+  return urgency ? `${absolute} · ${urgency}` : absolute
+}

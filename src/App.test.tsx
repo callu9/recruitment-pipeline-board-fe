@@ -484,7 +484,7 @@ test('clamps the vanished last page, keeps detail and failed rollback, and resto
   fireEvent.click(within(detail).getByRole('button', { name: `면접 집행 · ${last.name} · ${last.id}` }))
   await waitFor(() => expect(pageStatus()).toHaveTextContent('1 / 1 페이지'))
   expect(tableRows().length).toBe(20)
-  expect(within(detail).getByText('면접', { selector: 'span' })).toBeInTheDocument()
+  expect(within(within(detail).getByRole('group', { name: '현재 채용 단계' })).getByText('면접')).toBeInTheDocument()
   expect(detail).toContainElement(document.activeElement as HTMLElement)
   await waitFor(() => expect(release).toBeTypeOf('function'))
   release?.()

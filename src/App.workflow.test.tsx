@@ -21,6 +21,7 @@ const save = (form: HTMLElement, name: string) => fireEvent.click(within(form).g
 test('requires rationale for missing evaluation and persists the confirmed transition', async () => {
   await start(); fireEvent.click(screen.getByRole('button', { name: /^면접 집행/ }))
   const dialog = screen.getByRole('dialog', { name: '단계 변경 확인' })
+  expect(within(dialog).getByLabelText('미완료 업무 확인 및 진행 사유').closest('form')).not.toBeNull()
   expect(loadApplicants()[0].stage).toBe('DOCUMENT_REVIEW')
   fireEvent.click(within(dialog).getByRole('button', { name: '확인' }))
   expect(within(dialog).getByRole('alert')).toHaveTextContent('진행 사유')
@@ -304,4 +305,38 @@ test('keeps the previous history entry after declining back with an unsaved draf
     expect(new URLSearchParams(window.location.search).get('e2eHistory')).toBe('anchor')
     expect(loadApplicants()[0].evaluations?.[0].status).toBe('PENDING')
   } finally { storage.mockRestore(); confirm.mockRestore() }
+})
+
+test('distinguishes an empty archive from a filtered archive', async () => {
+  await start()
+  fireEvent.click(screen.getByRole('button', { name: /^보관·인재풀/ }))
+  expect(screen.getByRole('heading', { name: '아직 보관된 지원자가 없습니다.' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '필터 초기화' })).not.toBeInTheDocument()
+})
+
+test('shows a filter recovery action when archived records exist', async () => {
+  const applicant = loadApplicants()[0]
+  saveApplicants([applicant, { ...applicant, id: 'archived-test', stage: 'REJECTED', archivedAt: '2026-10-07' }])
+  await start()
+  fireEvent.click(screen.getByRole('button', { name: /^보관·인재풀/ }))
+  fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: '존재하지 않는 이름' } })
+  expect(screen.getByRole('heading', { name: '조건에 맞는 지원자가 없습니다.' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '필터 초기화' }))
+  expect(screen.getByRole('table', { name: '지원자 목록' })).toHaveTextContent(applicant.name)
+})
+
+test('uses domain labels in evaluation records and planning options', async () => {
+  await start(); openDetail()
+  expect(screen.getByRole('dialog')).not.toHaveTextContent('SCREEN')
+  const form = openForm('평가 계획·재평가')
+  expect(within(form).getByLabelText('대상 평가')).toHaveTextContent('서류검토 · 1회차 · 작성 필요')
+  expect(within(form).getByLabelText('대상 평가')).not.toHaveTextContent('PENDING')
+})
+
+test('shows due urgency only for active applicants', async () => {
+  const today = getLocalDateString()
+  const applicant = loadApplicants()[0]
+  saveApplicants([{ ...applicant, dueDate: today, evaluations: [] }])
+  await start()
+  expect(screen.getByRole('table', { name: '지원자 목록' })).toHaveTextContent('오늘 마감')
 })

@@ -204,3 +204,6 @@ export function getAllowedNextStages(currentStage: ApplicantStage) {
 export function canTransitionTo(currentStage: ApplicantStage, targetStage: ApplicantStage) {
   return getAllowedNextStages(currentStage).includes(targetStage)
 }
+
+export const EVALUATION_TYPE_LABELS = { SCREEN: '서류검토', INTERVIEW: '면접', FINAL: '처우협의' } as const
+export const EVALUATION_STATUS_LABELS = { PENDING: '작성 필요', SUBMITTED: '작성 완료' } as const

@@ -114,3 +114,14 @@ test('overdue priority excludes today, missing dates and terminal stages', () =>
   const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), evaluations: [], stage: i === 3 ? 'REJECTED' as const : 'INTERVIEW' as const, appliedAt: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'][i], dueDate: ['2026-10-06', '2026-10-01', '2026-10-07', '2026-10-01', undefined][i] }))
   expect(sortIds(items, 'OVERDUE')).toEqual(['1', '0', '4', '3', '2'])
 })
+
+test('formats deadline urgency by calendar days across DST and year boundaries', async () => {
+  const workspace = await import('./workspaceSelectors')
+  expect(workspace.formatWorkspaceDueDate).toBeTypeOf('function')
+  expect(workspace.formatWorkspaceDueDate('2026-03-09', true, '2026-03-08')).toBe('2026.03.09 · 내일 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-11-01', true, '2026-11-03')).toBe('2026.11.01 · 2일 지연')
+  expect(workspace.formatWorkspaceDueDate('2027-01-01', true, '2026-12-31')).toBe('2027.01.01 · 내일 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-10-08', true, '2026-10-08')).toBe('2026.10.08 · 오늘 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-10-08', false, '2026-10-10')).toBe('2026.10.08')
+  expect(workspace.formatWorkspaceDueDate(undefined, true, '2026-10-08')).toBe('미정')
+})
