@@ -55,3 +55,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (max-width: 560px) { .shell { padding: 17px 12px 36px; }.metrics { grid-template-columns: repeat(2, 1fr); gap: 8px; }.metric { padding: 12px; }.metric strong { font-size: 21px; }.mainTabs { overflow-x: auto; }.mainTabs button { padding: 0 12px; }.viewHeader { align-items: flex-start; flex-direction: column; gap: 10px; }.detailPanel { width: 100%; padding: 22px 18px; }.headerMeta { font-size: 12px; }.calendarFilters { width: 100%; }.calendarFilters select { flex: 1; min-width: 0; }.positionsTable { min-width: 780px; } }
 
 .appHeader .workspaceTitle { font-size: 18px; }
+
+.management { padding: 12px 0; }
+.management details { padding: 10px 14px; margin: 6px 0; border: 1px solid #dfe5ec; border-radius: 8px; background: white; }
+.management form { max-width: 640px; }
+.detailSection summary { cursor: pointer; padding: 8px 0; font-weight: 700; font-size: 12px; }
+.feedbackForm fieldset { display: grid; gap: 8px; padding: 0; margin: 0; border: 0; min-width: 0; }
+.headerMeta { flex-wrap: wrap; align-items: center; }
+.eventFOLLOW_UP { border-left-color: #24a16c; background: #ebfaf2; }

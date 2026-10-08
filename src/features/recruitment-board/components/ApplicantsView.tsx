@@ -9,16 +9,17 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Pagination, PaginationContent, PaginationItem } from '@/components/ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position } from '../model/applicant.types'
-import { getAllowedNextStages, getForwardActionLabel, isTerminalStage, STAGES } from '../model/stages'
-import { EMPTY_FILTERS, filterWorkspaceApplicants, getStageCounts, hasPendingEvaluation, isOverdue, type ApplicantPageSize, type ApplicantSort, type paginateApplicants, type WorkspaceFilters } from '../model/workspaceSelectors'
+import { getLocalDateString, getAllowedNextStages, getForwardActionLabel, isTerminalStage, STAGES } from '../model/stages'
+import { EMPTY_FILTERS, isCurrentInterviewSchedule, filterWorkspaceApplicants, getStageCounts, getWorkDueDates, isRecruiting, hasPendingEvaluation, isOverdue, type ApplicantPageSize, type ApplicantSort, type paginateApplicants, type WorkspaceFilters } from '../model/workspaceSelectors'
 
-function dateLabel(value?: string) { return value ? value.slice(0, 10).replaceAll('-', '.') : '미정' }
+function dateLabel(value?: string) { return value ? getLocalDateString(value).replaceAll('-', '.') : '미정' }
 function applicantName(applicant: Applicant) { return `${applicant.name} · ${applicant.id}` }
 
 export function StageActionButtons({ applicant, isPending, onMove, onReject }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage, trigger?: HTMLButtonElement) => void; onReject: (trigger?: HTMLButtonElement) => void }) {
   const nextStage = getAllowedNextStages(applicant.stage).find((stage) => stage !== 'REJECTED')
   const trigger = useRef<HTMLButtonElement>(null)
   const [container, setContainer] = useState<HTMLDialogElement | undefined>()
+  if (applicant.archivedAt || (applicant.lifecycle && applicant.lifecycle !== 'ACTIVE')) return <span className="text-sm text-muted-foreground">{applicant.archivedAt ? '보관됨' : { ON_HOLD: '보류', WITHDRAWN: '철회', OFFER_DECLINED: '오퍼 거절', ACTIVE: '진행' }[applicant.lifecycle!]}</span>
   if (isTerminalStage(applicant.stage)) return <span className="text-sm text-muted-foreground">종료됨</span>
   const label = applicantName(applicant)
   return <div className="flex items-center gap-2" aria-label={`${label} 단계 액션`} aria-busy={isPending}>
@@ -91,7 +92,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
   return <section className="min-w-0" aria-labelledby="applicants-heading">
     <div className="my-6 flex flex-wrap items-center justify-between gap-2">
       <h2 id="applicants-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight">지원자 <span className="text-muted-foreground">{applicants.length}</span></h2>
-      <p className="text-sm text-muted-foreground">진행 중 {applicants.filter(({ stage }) => !isTerminalStage(stage)).length} · 평가 대기 {applicants.filter((item) => !isTerminalStage(item.stage) && hasPendingEvaluation(item)).length}</p>
+      <p className="text-sm text-muted-foreground">진행 중 {applicants.filter(isRecruiting).length} · 평가 대기 {applicants.filter((item) => !isTerminalStage(item.stage) && hasPendingEvaluation(item)).length}</p>
     </div>
     {positionsError && <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive bg-background p-3 text-sm text-destructive" role="alert"><span>포지션 정보를 불러오지 못했습니다. 포지션 필터를 사용할 수 없습니다.</span><Button type="button" variant="outline" onClick={() => void refetchPositions()}>포지션 정보 다시 시도</Button></div>}
     <Collapsible open={expanded} onOpenChange={(open) => { if (!open && document.activeElement?.closest('[data-slot="collapsible-content"]')) filterToggle.current?.focus(); setExpanded(open) }}>
@@ -129,8 +130,8 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
             <TableCell sticky><Button data-applicant-trigger type="button" variant="applicant" size="applicant" aria-label={`지원자 상세 보기: ${applicantName(applicant)}`} aria-pressed={selectedId === applicant.id} onClick={(event) => onSelect(applicant.id, event.currentTarget)}><span className="grid min-w-0 gap-1"><strong>{applicant.name}</strong><span className="truncate text-xs text-muted-foreground">{applicant.role} · 지원 {dateLabel(applicant.appliedAt)}</span></span></Button></TableCell>
             <TableCell><Badge variant={applicant.stage === 'REJECTED' ? 'destructive' : applicant.stage === 'HIRED' ? 'outline' : 'secondary'}>{STAGES.find(({ code }) => code === applicant.stage)?.label}</Badge></TableCell>
             <TableCell>{applicant.owner ?? '미지정'}</TableCell>
-            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{applicant.nextAction ?? '없음'}</span><small className="block text-xs text-muted-foreground">{dateLabel(applicant.dueDate)}</small></TableCell>
-            <TableCell>{applicant.schedule ? <><strong>{dateLabel(applicant.schedule.date)}</strong><small className="block text-xs text-muted-foreground">{applicant.schedule.startTime} · {applicant.schedule.format === 'VIDEO' ? '화상' : '대면'}</small></> : <span className="text-muted-foreground">미정</span>}</TableCell>
+            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{applicant.nextAction ?? '없음'}</span><small className="block text-xs text-muted-foreground">{dateLabel(getWorkDueDates(applicant)[0])}</small></TableCell>
+            <TableCell>{isCurrentInterviewSchedule(applicant) && applicant.schedule ? <><strong>{dateLabel(applicant.schedule.date)}</strong><small className="block text-xs text-muted-foreground">{applicant.schedule.startTime} · {applicant.schedule.format === 'VIDEO' ? '화상' : '대면'}</small></> : <span className="text-muted-foreground">미정</span>}</TableCell>
             <TableCell><StageActionButtons applicant={applicant} isPending={pendingIds.has(applicant.id)} onMove={(stage, trigger) => onMove(applicant, stage, trigger)} onReject={(trigger) => onReject(applicant, trigger)} /></TableCell>
           </TableRow>)}</TableBody>
         </Table>

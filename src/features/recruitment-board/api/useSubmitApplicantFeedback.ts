@@ -1,3 +1,4 @@
+import { getApplicantPending } from './applicantPending'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import type { Applicant, SubmitApplicantFeedbackRequest } from '../model/applicant.types'
@@ -24,10 +25,11 @@ export function useSubmitApplicantFeedback({ onError, onSuccess }: {
   onSuccess: (applicant: Applicant, variables: FeedbackVariables) => void
 }) {
   const queryClient = useQueryClient()
-  const pendingIdsRef = useRef(new Set<string>())
+  const pendingIdsRef = useRef(getApplicantPending(queryClient))
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const mutation = useMutation({
-    mutationFn: patchApplicantFeedback,
+    mutationFn: patchApplicantFeedback, retry: false,
+    onMutate: () => queryClient.cancelQueries({ queryKey: applicantsQueryKey }),
     onSuccess: (applicant, variables) => {
       queryClient.setQueryData<Applicant[]>(applicantsQueryKey, (current = []) =>
         replaceApplicant(current, applicant))

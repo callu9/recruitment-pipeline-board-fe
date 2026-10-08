@@ -1,3 +1,4 @@
+import { saveApplicants } from './mocks/mockDb'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -15,7 +16,7 @@ if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModa
 if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function close() { this.open = false; this.dispatchEvent(new Event('close')) }
 
 // Equal dates keep ID-based interaction fixtures stable; sorting tests override dates explicitly.
-const createSeedApplicants = (count: number) => seedApplicants(count).map((item) => ({ ...item, appliedAt: '2026-09-01' }))
+const createSeedApplicants = (count: number): Applicant[] => seedApplicants(count).map((item) => ({ ...item, appliedAt: '2026-09-01', evaluations: [{ ...item.evaluations![0], type: ({ DOCUMENT_REVIEW: 'SCREEN', INTERVIEW: 'INTERVIEW', OFFER: 'FINAL', HIRED: 'FINAL', REJECTED: 'FINAL' } as const)[item.stage], status: 'SUBMITTED' as const, score: 80, comment: '검증된 평가' }], schedule: item.stage === 'INTERVIEW' && item.schedule ? { ...item.schedule, status: 'COMPLETED' as const } : item.schedule }))
 const successToast = () => screen.findByText(/님을 .+으로 이동했습니다\.|님의 피드백을 저장했습니다\./)
 const openFilters = () => fireEvent.click(screen.getByRole('button', { name: /추가 필터/ }))
 
@@ -35,6 +36,7 @@ afterEach(() => {
   window.getSelection()?.removeAllRanges()
   resetMockApiTestConfig()
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 test('renders the workspace tabs, real summary metrics, and dense applicant table', async () => {
@@ -71,7 +73,7 @@ test('opens the context-preserving detail panel and restores trigger focus', asy
   expect(screen.getByRole('dialog', { name: /김민지/ })).toBeInTheDocument()
   expect(screen.getByText('타임라인')).toBeInTheDocument()
   const detail = screen.getByRole('dialog', { name: /김민지/ })
-  expect(within(detail).getByText('Frontend Engineer')).toBeInTheDocument()
+  expect(within(detail).getAllByText('Frontend Engineer').length).toBeGreaterThan(0)
   expect(within(detail).queryByText('position-frontend')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '상세 패널 닫기' }))
   expect(document.activeElement).toBe(trigger)
@@ -79,6 +81,7 @@ test('opens the context-preserving detail panel and restores trigger focus', asy
 
 test('moves ordinary stages without a confirmation and shows the updated row', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  saveApplicants(createSeedApplicants(1))
   renderApp(createSeedApplicants(1))
   const action = await screen.findByRole('button', { name: '면접 집행 · 김민지 · applicant-001' })
   expect(action).toHaveTextContent('면접 집행')
@@ -148,7 +151,7 @@ test('toggles the detail from a unique applicant button and moves focus into the
 
 test('requires confirmation only for terminal stage moves', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
+  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const, evaluations: [{ ...createSeedApplicants(1)[0].evaluations![0], type: 'FINAL' as const }] }
   server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...applicant, stage: 'HIRED' })))
   renderApp([applicant])
   const actionButton = await screen.findByRole('button', { name: '최종 합격 · 김민지 · applicant-001' })
@@ -163,7 +166,7 @@ test('requires confirmation only for terminal stage moves', async () => {
 
 test('keeps terminal confirmation open in StrictMode and restores originating focus', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const }
+  const applicant = { ...createSeedApplicants(1)[0], stage: 'OFFER' as const, evaluations: [{ ...createSeedApplicants(1)[0].evaluations![0], type: 'FINAL' as const }] }
   let patchCount = 0
   server.use(http.patch('*/api/applicants/:applicantId/stage', () => { patchCount += 1; return HttpResponse.json({ ...applicant, stage: 'HIRED' }) }))
   renderApp([applicant], true)
@@ -196,9 +199,9 @@ test('exposes Today, Calendar, and Positions operations views', async () => {
   expect(screen.getByRole('heading', { name: '캘린더' })).toBeInTheDocument()
   expect(screen.getByText('일정 미정')).toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: /^포지션/ }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^포지션/ }))
   expect(screen.getByRole('heading', { name: '포지션' })).toBeInTheDocument()
-  expect(screen.getByText('Frontend Engineer')).toBeInTheDocument()
+  expect(within(screen.getByRole('table', { name: '포지션 목록' })).getByText('Frontend Engineer')).toBeInTheDocument()
 })
 
 test('retries applicants after one initial failure and exposes the active refetch', async () => {
@@ -251,7 +254,9 @@ test('keeps optimistic rollback scoped to the failed applicant', async () => {
 
 test('submits the current-stage feedback from the detail panel', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
-  renderApp(createSeedApplicants(1))
+  const feedbackApplicant = createSeedApplicants(1)[0]!
+  feedbackApplicant.evaluations![0].status = 'PENDING'
+  renderApp([feedbackApplicant])
   const table = await screen.findByRole('table', { name: '지원자 목록' })
   fireEvent.click(within(table).getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
 
@@ -272,7 +277,9 @@ test('keeps feedback input after a failed save', async () => {
   setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
   server.use(http.patch('*/api/applicants/:applicantId/evaluations/:evaluationId', () =>
     HttpResponse.json({ code: 'MOCK_FAILURE' }, { status: 503 })))
-  renderApp(createSeedApplicants(1))
+  const feedbackApplicant = createSeedApplicants(1)[0]!
+  feedbackApplicant.evaluations![0].status = 'PENDING'
+  renderApp([feedbackApplicant])
   const table = await screen.findByRole('table', { name: '지원자 목록' })
   fireEvent.click(within(table).getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
 
@@ -288,6 +295,7 @@ test('keeps feedback input after a failed save', async () => {
 
 test('blocks duplicate feedback submissions for the same applicant', async () => {
   const applicant = createSeedApplicants(1)[0]!
+  applicant.evaluations![0].status = 'PENDING'
   const evaluation = applicant.evaluations![0]!
   let patchCount = 0
   let releaseRequest: (() => void) | undefined
@@ -406,7 +414,7 @@ test.each(['이름 검색', '직무', '담당자', '포지션', '단계', '일�
   expect(screen.getByLabelText('페이지당 표시')).toHaveValue('20')
 })
 
-test('resets same-count searches, keeps tab context, and applies position navigation with page one', async () => {
+test('resets same-count searches and preserves tab context', async () => {
   const applicants = createSeedApplicants(240).map((applicant, index) => ({ ...applicant, name: index < 120 ? 'Alpha' : 'Beta' }))
   renderApp(applicants)
   await screen.findByRole('table', { name: '지원자 목록' })
@@ -421,8 +429,17 @@ test('resets same-count searches, keeps tab context, and applies position naviga
   expect(screen.getByLabelText('페이지당 표시')).toHaveValue('50')
   fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: 'Beta' } })
   expect(pageStatus()).toHaveTextContent('1 / 3 페이지')
+})
+
+test('applies position navigation with page one while preserving page size', async () => {
+  const applicants = createSeedApplicants(240).map((applicant, index) => ({ ...applicant, name: index < 120 ? 'Alpha' : 'Beta' }))
+  renderApp(applicants)
+  await screen.findByRole('table', { name: '지원자 목록' })
+  fireEvent.change(screen.getByLabelText('이름 검색'), { target: { value: 'Beta' } })
+  fireEvent.change(screen.getByLabelText('페이지당 표시'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: '다음 페이지' }))
-  fireEvent.click(screen.getByRole('button', { name: /^포지션/ }))
+  expect(pageStatus()).toHaveTextContent('2 / 3 페이지')
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^포지션/ }))
   fireEvent.click(screen.getAllByRole('button', { name: '지원자 보기' })[0]!)
   openFilters()
   expect(screen.getByLabelText('포지션')).toHaveValue(SEED_POSITIONS[0]!.id)
@@ -451,7 +468,7 @@ test('preserves the dedicated original-empty state', async () => {
 })
 
 test('clamps the vanished last page, keeps detail and failed rollback, and restores fallback focus', async () => {
-  const applicants = createSeedApplicants(21).map((applicant) => ({ ...applicant, stage: 'DOCUMENT_REVIEW' as const }))
+  const applicants = createSeedApplicants(21).map((applicant) => ({ ...applicant, stage: 'DOCUMENT_REVIEW' as const, evaluations: [{ ...applicant.evaluations![0], type: 'SCREEN' as const }] }))
   let release: (() => void) | undefined
   server.use(http.patch('*/api/applicants/:applicantId/stage', async () => {
     await new Promise<void>((resolve) => { release = resolve })
@@ -484,7 +501,7 @@ test('clamps the vanished last page, keeps detail and failed rollback, and resto
 })
 
 test('restores heading focus when a focused action row disappears and preserves unrelated input focus', async () => {
-  const applicants = createSeedApplicants(21).map((applicant) => ({ ...applicant, stage: 'DOCUMENT_REVIEW' as const }))
+  const applicants = createSeedApplicants(21).map((applicant) => ({ ...applicant, stage: 'DOCUMENT_REVIEW' as const, evaluations: [{ ...applicant.evaluations![0], type: 'SCREEN' as const }] }))
   const last = applicants[20]!
   server.use(http.patch('*/api/applicants/:applicantId/stage', () => HttpResponse.json({ ...last, stage: 'INTERVIEW' })))
   renderApp(applicants)
@@ -619,7 +636,7 @@ test('sorts before pagination, resets sort changes, and preserves sort and size 
 })
 
 test('keeps failure A after success B expires and replaces only A on retry, with one stable modal live region', async () => {
-  const applicants = createSeedApplicants(2).map((item) => ({ ...item, stage: 'DOCUMENT_REVIEW' as const }))
+  const applicants = createSeedApplicants(2).map((item) => ({ ...item, stage: 'DOCUMENT_REVIEW' as const, evaluations: [{ ...item.evaluations![0], type: 'SCREEN' as const }] }))
   const [first, second] = applicants
   let failed = false
   server.use(http.patch('*/api/applicants/:id/stage', ({ params }) => {

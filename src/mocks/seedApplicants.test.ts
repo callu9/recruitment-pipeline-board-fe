@@ -11,6 +11,17 @@ describe('createSeedApplicants', () => {
     expect(names).toContain('Alex Kim')
   })
 
+  test('keeps the default demo compact with distinct names and all roles and stages', () => {
+    const applicants = createSeedApplicants(undefined, '2026-10-07')
+
+    expect(applicants).toHaveLength(30)
+    expect(new Set(applicants.map(({ name }) => name)).size).toBe(applicants.length)
+    expect(new Set(applicants.map(({ role }) => role))).toEqual(new Set(APPLICANT_ROLES))
+    expect(new Set(applicants.map(({ stage }) => stage))).toEqual(new Set(STAGES.map(({ code }) => code)))
+    expect(applicants.some(({ schedule }) => schedule?.date === '2026-10-07')).toBe(true)
+    expect(applicants.some(({ stage, schedule }) => stage === 'INTERVIEW' && !schedule)).toBe(true)
+  })
+
   test('creates the same applicants for the same size', () => {
     expect(createSeedApplicants(240)).toEqual(createSeedApplicants(240))
   })
@@ -54,6 +65,7 @@ describe('createSeedApplicants', () => {
 
     expect(applicants).toHaveLength(1000)
     expect(new Set(applicants.map(({ id }) => id))).toHaveLength(1000)
+    expect(new Set(applicants.map(({ name }) => name)).size).toBe(1000)
     expect(applicants[0]).toMatchObject({ id: 'applicant-001', stage: STAGES[0].code })
     expect(applicants[999]).toMatchObject({ id: 'applicant-1000' })
   })

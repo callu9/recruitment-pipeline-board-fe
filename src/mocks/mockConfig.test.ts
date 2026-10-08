@@ -40,6 +40,7 @@ describe('resolveFailureRate', () => {
 describe('resolveApplicantSeedSize', () => {
   test.each([
     [undefined, DEFAULT_APPLICANT_SEED_SIZE],
+    ['30', DEFAULT_APPLICANT_SEED_SIZE],
     ['240', DEFAULT_APPLICANT_SEED_SIZE],
     ['1000', PERFORMANCE_APPLICANT_SEED_SIZE],
     ['0', DEFAULT_APPLICANT_SEED_SIZE],
