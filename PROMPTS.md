@@ -4180,3 +4180,66 @@ This block is automatically supplied ambient UI state, not part of the user's re
   ```
 
 - 해시: 최종 동기화 대기
+
+
+## [repository-workflow] 위임 완료 규칙과 PR·결정 템플릿 보존
+
+### 기록 출처와 이번 범위의 수동 기록 예외
+
+- 이번 기록은 hook 생성 기록이 아니다. 위임 대화로 제공된 실제 사용자 게시 요청과 아래 신규 예외 승인 원문만 수동으로 기록한다. 이전 문서 작성 세션의 프롬프트나 다른 세션 로그를 추정·선택하지 않는다.
+- hook-provided `PROMPT_LOG_SESSION_ID`는 없다. 사용자에게 `workspace-workflow` 예외가 남은 문서에는 적용되지 않는다고 보고했고, 이번 `repository-workflow` 범위의 수동 기록 예외를 별도로 승인받았다. 가짜 hook ID·다른 환경 변수 대체·영구 기록 규칙 변경은 없다.
+- 사용자가 이미 작성해 둔 AGENTS의 Orca 규칙과 두 초안 템플릿을 원문대로 보존한다. 이번 예외를 상시 승인 규칙으로 AGENTS나 skill에 추가하지 않는다.
+
+### 프롬프트 1 — 위임 대화에서 전달된 실제 사용자 게시 요청
+
+```text
+recruitment / resume2026 / relay 세 곳 미커밋 변경사항 좀 원격에 반영하라고 해줘. 기능브랜치 push면 될 거 같아. PR 없으면 PR 생성까지
+```
+
+### 남은 문서의 수동 기록 예외 승인 원문
+
+assistant:
+
+```text
+채용 보드 화면 개선도 PR #12 반영과 CI 통과까지 끝났어.
+
+다만 AGENTS.md, PR 템플릿, 작업 결정 기록 3개가 남아 있어. 이 문서들까지 이번 수동 기록 예외에 포함해서 별도 기능 브랜치·draft PR로 올려도 될까? 앞선 승인을 화면 개선에만 한정해서 전달한 탓에 다시 확인하게 됐어.
+```
+
+user — Sentinel_e38c59c5d4c48191b93f7db731a2f1f2:
+
+```text
+ㅇ
+```
+
+### AI 출력 요지
+
+- 남은 사용자 변경은 AGENTS의 Orca 완료 규칙 6줄, PR 템플릿 133bytes, 결정 기록 초안 300bytes다. 자동 승인 예외·서버 정책을 새로 설계하거나 기존 문서를 재작성하지 않고 원문을 보존한다.
+- AGENTS는 Orca 완료 보고가 필요한 세션의 링크 전달·단일 대기·보고 전달·후속 정리를 안내한다. PR 템플릿은 Summary/Verification 초안이며 docs/codex/DECISIONS는 상태·문맥·대안·검증·되돌림 조건의 빈 틀이다. 채용 앱 기능 구현·실제 결정 기록으로 주장하지 않는다.
+- writing-for-agents 관점에서 적용 조건과 완료 기준을 검토했다. 기존 working agreement와 prompt-record 규칙을 그대로 유지하며 이번 예외를 영구화하지 않는다.
+- 기존 `feat/recruitment-operations` 체크아웃·브랜치·사용자 파일·실제 index를 유지하고, 현재 dev 기준의 별도 `chore/repository-workflow` 브랜치에 문서 3개와 이 기록만 게시한다. 앱 코드 변경을 해당 PR에 포함하지 않는다.
+
+### 리뷰 / 검증
+
+- 세 파일의 전체 내용을 읽고 UTF-8·파일 크기·SHA-256·mtime을 확인했다. 일반 private-key/token 패턴 검사에서 일치가 없었다. exhaustive 보안 감사라고 주장하지 않는다. 이전에 검토한 후보와 해시가 동일해 동시 변경 징후가 없다.
+- 현재 dev SHA와 로컬 origin/dev가 모두 `c853d0fcaa4cb6a221c14856ad0742d387434031`임을 확인했다. AGENTS의 기존 기준 내용은 현재 기능 브랜치와 동일하며, 두 템플릿은 dev에 없는 신규 파일이다.
+- 원문 3개를 담은 패치의 `git apply --check --cached`가 통과했다. 기존 실제 index는 비어 있으며 현재 체크아웃을 변경하지 않았다.
+- `node --test .agents/skills/prompt-record/prompt-record.test.mjs`: 5개 통과. 이 계약의 skill·script와 구현 계획은 dev와 현재 기능 브랜치 사이에서 바뀌지 않았다. 기록 후 후보 diff 검사와 계약 검사를 재실행한다.
+- 앱 코드 변경이 없으므로 이 문서 후보에 대해 전체 앱 suite나 브라우저 E2E를 다시 실행하지 않는다. PR12의 264개 테스트·Chrome 42검사는 별도 기능 범위의 결과다. 이 문서 PR의 정확한 head SHA에 대한 CI lint·test·build 결과는 게시 후 PR 본문에 확인·기록한다.
+- Orca 실제 실행·worker_done·자동 정리 동작은 실행하지 않았다. 사용자 파일의 원격 보존을 검증하는 문서 PR이며 별도의 사용자 수동 실행 통과를 주장하지 않는다.
+- 일반 push와 dev 대상 한국어 Draft PR을 사용한다. 병합·dev 직접 push·force-push·배포·새 clone/worktree는 하지 않는다. 기존 체크아웃에는 세 원문 변경이 계속 보일 수 있으나 별도 원격 커밋의 각 blob과 일치하는지 최종 확인한다.
+- 이전 scope의 기록·pending hash는 이 PR에서 갱신하지 않는다. dev의 기존 PROMPTS에 현재 scope만 추가한다.
+
+### 연결 커밋
+
+- 예정 메시지:
+
+  ```text
+  chore(repository-workflow): 위임 완료 규칙과 PR·결정 템플릿 보존
+
+  - 기존 사용자 Orca 완료 규칙과 PR·결정 기록 초안 원문 보존
+  - 이번 문서 범위의 실제 게시 지시와 수동 기록 예외 승인 기록
+  - dev 기준 문서 전용 브랜치로 분리하고 현재 체크아웃 보존
+  ```
+
+- 해시: 최종 동기화 대기

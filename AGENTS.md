@@ -55,6 +55,12 @@ Before any change, read:
 - During `[submission-review]`, resolve and update all earlier pending hashes in one batch. Match both the planned subject and exact scope; stop on a missing or ambiguous commit rather than guessing.
 - Any important assumption, adopted proposal, rejected proposal, or unfinished scope belongs in `DECISIONS.md`.
 
+## Orca delegation completion
+
+- When this Codex session must receive an Orca completion report, give the worker the current session deep link and explicitly require a final report.
+- Keep one blocking `worker_done` wait active until that report arrives. Do not poll repeatedly or perform a separate review unless the user requests it.
+- Do not end the turn before relaying the Orca report here. Then acknowledge the delivery, release the worker, close task terminals, remove its worktree, and delete its task branch.
+
 ## Verification before requesting a commit
 
 Run and report the actual result of:
