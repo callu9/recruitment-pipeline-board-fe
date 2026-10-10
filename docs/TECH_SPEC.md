@@ -16,7 +16,7 @@
 - 필요한 UI만 shadcn Radix 기반으로 도입한다. CLI `4.21.3`으로 Button, Pagination, Native Select, Table, Badge, Input, Collapsible, Dropdown Menu, Sonner 소스를 생성했다. Sonner만 추가 런타임으로 사용하며 미사용 next-themes는 제거했다. Tailwind v4 Vite plugin과 `@/* -> ./src/*` alias를 병합하며 배포 base와 Vitest 설정을 유지한다.
 - `@shadcn/lint` `0.2.0`을 기존 `npm run lint`에 연결한다. 새 `src/features/recruitment-board/components/**`와 `src/components/ui/**`의 TS/TSX에 여섯 디자인 규칙을 error로 적용한다. UI 정의 내부의 no-restyle/no-arbitrary-values/require-static-classes만 해제한다. 기존 App CSS Modules는 디자인 lint 적용 대상이 아니다.
 - `App`의 로컬 page/pageSize/sort는 필터와 같은 수명을 가진다. `paginateApplicants(applicants, page, pageSize)`는 `filterWorkspaceApplicants → sortWorkspaceApplicants → paginateApplicants` 순서의 결과를 clamp/slice하며 원본을 변경하지 않는다. 크기는 `20 | 50 | 100`이고 빈 결과는 page=1/totalPages=0/from=0/to=0이다.
-- 필터·정렬 변경 이벤트와 Positions 진입에서 page=1을 함께 설정한다. 결과 개수 변화만으로 필터 변경을 추론하지 않는다. cache 변경으로 범위를 벗어나면 렌더 전에 보정값을 state에도 반영한다.
+- 필터·정렬 변경 이벤트와 Positions 진입에서 page=1을 함께 설정한다. 결과 개수 변화만으로 필터 변경을 추론하지 않는다. 조회 성공 후 cache 변경으로 범위를 벗어나면 layout effect에서 보정값을 state와 URL에 반영한다. 최초 조회 중에는 URL의 페이지를 빈 cache로 보정하지 않는다.
 - ApplicantsView는 현재 페이지 행만 렌더한다. 상세 선택 ID는 전체 cache에서 찾고 pending guard와 rollback은 기존 hook을 유지한다. 페이지 이동 때문에 GET/PATCH나 localStorage 갱신을 실행하지 않는다.
 - `지원자 N`·진행/평가 요약은 전체 cache를 계산한다. 표 위 왼쪽 `총 N명 · A–B명`, 오른쪽 표시 크기 select를 스크롤 밖에 둔다. 표 뒤 footer는 중앙 정렬·상하 16px·간격 8px이며 이전/다음은 80×44px 이상이다.
 - Collapsible의 고급 조건은 접어도 filter state에 남는다. 활성 조건 칩 제거 후 남은 칩 또는 검색에 focus하고, 내부 focus를 가진 상태에서 접으면 toggle로 복원한다.
@@ -736,3 +736,12 @@ npm run build
 - `리뷰/검증`에 실제로 확인한 사실과 수정 판단을 썼다.
 - 관련 설계 결정이 있으면 `DECISIONS.md`를 갱신했다.
 - 기능 코드와 기록이 같은 scope의 한 커밋에 들어간다.
+
+
+## 업무 중심 표시·패널 수명 — workspace-workflow
+
+- `model/applicantWork.ts`의 `getApplicantWork`는 기존 활성 업무 predicate로 표시용 추천을 계산한다. 변환·API·단계 선행조건 정책을 변경하지 않는다. 실행 가능한 종료 통보는 지원 상태 재개보다 먼저 연결한다.
+- desktop detail은 native `show()`로 목록 조작을 유지한다. 모달인 확인/접수는 `showModal()`을 유지한다. 지원자 변경 전 저장소 quota로 보존할 수 없는 초안은 기존 명시적 버리기 확인을 유지한다.
+- 지원자 교체/업무 재진입은 session draft를 복원한다. 상세 영역은 mounted hidden pane으로 유지한다. 평가 진입은 현재 활성·PENDING·선택된 마감의 평가에만 포커스한다.
+- 접수 `RecruitmentManagement`를 modal open 상태와 무관하게 유지하여 component-local lock/pending을 보존한다. 닫힌 접수 dialog는 Sonner host 대상에서 제외한다. 상세 재진입 sequence/확인/접수 상태로 기존 portal host를 현재 dialog에 다시 연결한다.
+- 검증용 Chrome profile/context와 합성 localStorage는 실제 사용자 데이터 및 브라우저 profile과 분리한다. 관련 전체 회귀와 실제 Chrome E2E를 기록하며 실제 운영 BE/권한 검증으로 주장하지 않는다.

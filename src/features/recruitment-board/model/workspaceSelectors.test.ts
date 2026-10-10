@@ -23,11 +23,12 @@ test('builds the local workspace week through Sunday without UTC date drift', ()
 
 test('filters workspace rows by owner, stage, schedule, and overdue status', () => {
   const applicants = createSeedApplicants(30, '2026-09-07')
+  applicants.push({ ...applicants[0], id: 'reschedule-filter', stage: 'INTERVIEW', schedule: null })
   const filtered = filterWorkspaceApplicants(applicants, {
-    name: '', role: 'ALL', owner: '김하나', stage: 'DOCUMENT_REVIEW', noSchedule: true, overdue: true, positionId: '',
+    name: '', role: 'ALL', owner: '김하나', stage: 'INTERVIEW', noSchedule: true, overdue: true, positionId: '',
   }, '2026-09-07')
 
-  expect(filtered.every((applicant) => applicant.owner === '김하나' && applicant.stage === 'DOCUMENT_REVIEW' && !applicant.schedule && applicant.dueDate === '2026-09-05')).toBe(true)
+  expect(filtered.map(({ id }) => id)).toEqual(['reschedule-filter'])
 })
 
 test('derives stage counts and today/unscheduled queues from applicant data', () => {
@@ -105,11 +106,22 @@ test('sorts latest applications with deterministic ID ties without mutating sour
 })
 
 test('sorts active deadlines first, then no date and terminal applicants by application and ID', () => {
-  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), stage: i === 3 ? 'HIRED' as const : 'DOCUMENT_REVIEW' as const, appliedAt: ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-03'][i], dueDate: ['2026-10-09', '2026-10-08', undefined, '2026-10-01', '2026-10-08'][i] }))
+  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), evaluations: [], stage: i === 3 ? 'HIRED' as const : 'DOCUMENT_REVIEW' as const, appliedAt: ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-03'][i], dueDate: ['2026-10-09', '2026-10-08', undefined, '2026-10-01', '2026-10-08'][i] }))
   expect(sortIds(items, 'DUE')).toEqual(['1', '4', '0', '3', '2'])
 })
 
 test('overdue priority excludes today, missing dates and terminal stages', () => {
-  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), stage: i === 3 ? 'REJECTED' as const : 'INTERVIEW' as const, appliedAt: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'][i], dueDate: ['2026-10-06', '2026-10-01', '2026-10-07', '2026-10-01', undefined][i] }))
+  const items = createSeedApplicants(5).map((item, i) => ({ ...item, id: String(i), evaluations: [], stage: i === 3 ? 'REJECTED' as const : 'INTERVIEW' as const, appliedAt: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'][i], dueDate: ['2026-10-06', '2026-10-01', '2026-10-07', '2026-10-01', undefined][i] }))
   expect(sortIds(items, 'OVERDUE')).toEqual(['1', '0', '4', '3', '2'])
+})
+
+test('formats deadline urgency by calendar days across DST and year boundaries', async () => {
+  const workspace = await import('./workspaceSelectors')
+  expect(workspace.formatWorkspaceDueDate).toBeTypeOf('function')
+  expect(workspace.formatWorkspaceDueDate('2026-03-09', true, '2026-03-08')).toBe('2026.03.09 · 내일 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-11-01', true, '2026-11-03')).toBe('2026.11.01 · 2일 지연')
+  expect(workspace.formatWorkspaceDueDate('2027-01-01', true, '2026-12-31')).toBe('2027.01.01 · 내일 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-10-08', true, '2026-10-08')).toBe('2026.10.08 · 오늘 마감')
+  expect(workspace.formatWorkspaceDueDate('2026-10-08', false, '2026-10-10')).toBe('2026.10.08')
+  expect(workspace.formatWorkspaceDueDate(undefined, true, '2026-10-08')).toBe('미정')
 })
