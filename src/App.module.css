@@ -71,3 +71,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .feedbackForm [data-slot="native-select-wrapper"], .confirmationDialog [data-slot="native-select-wrapper"] { width: 100%; }
 @media (max-width: 560px) { .calendarFilters [data-slot="native-select-wrapper"] { flex: 1; min-width: 0; } }
+
+/* Approved work-first workspace: list stays usable beside the selected applicant. */
+.workspaceBody { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; }
+.workspaceBody.hasDetail { grid-template-columns: minmax(0, 1fr) 430px; }
+.workspaceContent { min-width: 0; }
+.detailPanel { position: sticky; top: 16px; inset-inline: auto; width: 430px; max-width: 100%; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); padding: 20px; margin: 20px 0 0; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgb(24 42 70 / 6%); }
+.detailTabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.detailPanel [role="tabpanel"]:not([hidden]) { display: grid; gap: 16px; }
+.detailPanel [hidden] { display: none !important; }
+.workSummary { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--secondary); }
+.workSummary h3, .workSummary p { margin: 0; font-size: 14px; line-height: 1.6; }
+.workSummary h3 { font-size: 18px; }
+.workSummary button { justify-self: start; }
+.intakeDialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--border); border-radius: 12px; overflow-y: auto; background: var(--background); }
+.intakeDialog::backdrop { background: rgb(24 36 54 / 42%); }
+.intakeDialog .management { padding-bottom: 0; }
+@media (max-width: 1000px) {
+  .workspaceBody.hasDetail { grid-template-columns: minmax(0, 1fr); }
+  .workspaceBody.hasDetail .workspaceContent { display: none; }
+  .detailPanel { position: relative; top: auto; width: 100%; height: auto; max-height: none; margin-top: 16px; }
+}
+@media (max-width: 560px) {
+  .detailPanel { padding: 16px; }
+  .intakeDialog { padding: 16px; }
+}

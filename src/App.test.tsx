@@ -1,3 +1,4 @@
+if (!HTMLDialogElement.prototype.show) HTMLDialogElement.prototype.show = function () { this.open = true }
 import { saveApplicants } from './mocks/mockDb'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'

@@ -23,7 +23,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
       }
     } catch { /* A corrupt draft does not prevent editing the saved record. */ }
   }, [key])
-  return <details className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={() => {
+  return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={() => {
     setSaved(false)
     try { sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(new FormData(ref.current!)))); setDraftError(false) } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }} onSubmit={async (event) => {
@@ -46,8 +46,8 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
 }
 const text = (data: FormData, key: string) => String(data.get(key) ?? '')
 
-export function ApplicantOperations({ applicant, actor, pending, save, positions }: { positions: Position[]; applicant: Applicant; actor: ApplicantOwner; pending: boolean; save: (operation: ApplicantOperation, actor: ApplicantOwner) => Promise<string | null> }) {
-  const form = (title: string, build: (data: FormData) => ApplicantOperation, children: ReactNode) => <OperationForm clearAfterSave={title === '담당 업무 편집' ? ['note'] : undefined} id={applicant.id} title={title} pending={pending} build={build} save={(operation) => save(operation, actor)}>{children}</OperationForm>
+export function ApplicantOperations({ applicant, actor, pending, save, positions, pane = 'work' }: { pane?: 'work' | 'support'; positions: Position[]; applicant: Applicant; actor: ApplicantOwner; pending: boolean; save: (operation: ApplicantOperation, actor: ApplicantOwner) => Promise<string | null> }) {
+  const form = (title: string, build: (data: FormData) => ApplicantOperation, children: ReactNode) => <div hidden={( ['포지션 배정 변경', '지원 정보 편집', '지원 상태 관리', '보관·복원', '지원 건 삭제'].includes(title) ? 'support' : 'work') !== pane}><OperationForm clearAfterSave={title === '담당 업무 편집' ? ['note'] : undefined} id={applicant.id} title={title} pending={pending} build={build} save={(operation) => save(operation, actor)}>{children}</OperationForm></div>
   return <>
     {form('포지션 배정 변경', (data) => ({ kind: 'transfer', positionId: text(data, 'positionId'), reason: text(data, 'reason') }), <><label>배정 포지션<NativeSelect name="positionId" required defaultValue={applicant.positionId}><NativeSelectOption value="">선택</NativeSelectOption>{positions.filter(({ status }) => status === 'OPEN').map((position) => <NativeSelectOption key={position.id} value={position.id}>{position.title}</NativeSelectOption>)}</NativeSelect></label><label>배정 변경 사유<Input name="reason" required /></label></>)}
     {form('지원 정보 편집', (data) => ({ kind: 'profile', name: text(data, 'name'), email: text(data, 'email'), phone: text(data, 'phone'), resumeUrl: text(data, 'resumeUrl'), portfolioUrl: text(data, 'portfolioUrl'), source: text(data, 'source') }), <>

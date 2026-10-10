@@ -275,3 +275,14 @@ UI는 실제 `fetch('/api/...')`를 호출하고 MSW가 이를 처리한다. 데
 - 기존 AGENTS.md 수정과 미추적 템플릿/docs/codex는 scope staging에서 제외하고 보존한다. 기존 OPEN draft PR12에 추가하며 병합·배포는 하지 않는다.
 
 - UI scope12개 파일을 staging한 후 커밋·push는 자동 승인 검토가 현재 환경에서 신뢰된 게시 승인을 확인하지 못해 거절했다. 실행되지 않은 커밋/push/새SHA CI를 완료로 보고하지 않는다. HEAD22487dc5와 staging을 보존하며 부모 승인 문맥의 후속 실행 또는 현재 환경의 확인 가능한 실행 승인으로 해소한다.
+
+
+## D-020. 승인된 업무 중심 구조를 기존 운영 정책 위에 적용
+
+- 사용자가 승인한 시안 방향과 감사 R01/R02/R03/R05를 `workspace-workflow` 한 범위로 구현한다. 원래 branch/HEAD에서 진행하며 사용자 AGENTS/템플릿/docs/codex 변경은 보존한다.
+- 업무 주 행동은 기존 active predicate를 사용하는 순수 selector로 계산한다. 목록/Today에서 폼으로 바로 연결하고 기존 단계 진행을 보조 행동으로 유지한다. 인증/소유 권한이 없어 시안의 ‘내 업무’ 탭을 권한 기능으로 새로 구현하지 않는다.
+- desktop에서는 nonmodal native list/detail split, mobile에서는 목록을 숨긴 상세 집중 화면을 사용한다. 지원 정보/이력과 내부ID 접힌 영역을 구분하고 mounted hidden form으로 초안을 보존한다. 접수는 제목 옆 native modal이며 폼의 lock/pending은 창 수명 밖에서 유지한다.
+- 독립 리뷰의 같은 지원자 재진입 알림 host, 이전 평가 focus, 접수 pending remount, 철회 후 통보 CTA 4건을 실패 테스트로 재현하고 수정했다. 최종 전체264tests/lint/build/diff 및 Chrome 증거를 상세 HTML에 기록한다. 미확인 전체 대비·VoiceOver·실제 모바일 기기·발송/운영 BE를 통과로 주장하지 않는다.
+- 현재 범위의 prompt hook 정보는 없다. 이전 UI 감사의 수동 예외를 재사용하거나 다른 로그를 읽지 않는다. 새 범위 기록과 게시는 정상 hook 또는 이번 범위에 대한 신규 명시적 수동 기록 승인이 있어야 진행한다.
+
+- 2026-10-10 05:18:33 UTC 사용자 신규 승인으로 이번 `workspace-workflow`에 한해 실제 대화의 수동 기록 예외를 적용한다. 승인 원문과 출처는 PROMPTS의 현재 scope에 남긴다. 가짜 hook ID·상시 규칙 변경·이전 예외 재사용 없이 현재 변경을 기능 브랜치와 기존 Draft PR12에 게시하며 최신 SHA CI를 확인한다.

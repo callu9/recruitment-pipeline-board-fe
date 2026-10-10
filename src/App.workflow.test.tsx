@@ -1,3 +1,4 @@
+if (!HTMLDialogElement.prototype.show) HTMLDialogElement.prototype.show = function () { this.open = true }
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { beforeEach, afterEach, expect, test, vi } from 'vitest'
@@ -14,7 +15,7 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); saveApplicants(
 afterEach(() => { localStorage.clear(); sessionStorage.clear(); resetMockApiTestConfig(); toast.dismiss() })
 const start = async () => { const result = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>); await screen.findByRole('table', { name: '지원자 목록' }); return result }
 const openDetail = () => fireEvent.click(within(screen.getByRole('table', { name: '지원자 목록' })).getByRole('button', { name: /지원자 상세 보기:/ }))
-const openForm = (name: string) => { const summary = screen.getByText(name, { selector: 'summary' }); summary.parentElement!.setAttribute('open', ''); return within(summary.parentElement!).getByRole('form', { name }) }
+const openForm = (name: string) => { if (name === '지원 접수' || name === '지원 일괄 가져오기') { if (!screen.queryByRole('dialog', { name: '지원 접수 및 가져오기' })) fireEvent.click(screen.getByRole('button', { name: '지원 접수' })) } else if (['포지션 배정 변경', '지원 정보 편집', '지원 상태 관리', '보관·복원', '지원 건 삭제'].includes(name)) fireEvent.click(screen.getByRole('tab', { name: '지원 정보' })); else if (screen.queryByRole('tab', { name: '업무' })) fireEvent.click(screen.getByRole('tab', { name: '업무' })); const summary = screen.getByText(name, { selector: 'summary' }); summary.parentElement!.setAttribute('open', ''); return within(summary.parentElement!).getByRole('form', { name }) }
 const change = (form: HTMLElement, label: string, value: string) => fireEvent.change(within(form).getByLabelText(label), { target: { value } })
 const save = (form: HTMLElement, name: string) => fireEvent.click(within(form).getByRole('button', { name: `${name} 저장` }))
 
@@ -111,6 +112,7 @@ test('shows timestamp-based application dates as KST local dates in list and det
     await start()
     expect(screen.getByRole('table', { name: '지원자 목록' })).toHaveTextContent('지원 2026.10.08')
     openDetail()
+    fireEvent.click(screen.getByRole('tab', { name: '지원 정보' }))
     expect(screen.getByRole('dialog').querySelector('dl')).toHaveTextContent('지원일2026.10.08')
   } finally { vi.unstubAllEnvs() }
 })
@@ -339,4 +341,90 @@ test('shows due urgency only for active applicants', async () => {
   saveApplicants([{ ...applicant, dueDate: today, evaluations: [] }])
   await start()
   expect(screen.getByRole('table', { name: '지원자 목록' })).toHaveTextContent('오늘 마감')
+})
+
+test('opens the incomplete work directly and keeps the desktop list available', async () => {
+  saveApplicants([{ ...loadApplicants()[0], stage: 'INTERVIEW', schedule: null }])
+  await start()
+  fireEvent.click(screen.getByRole('button', { name: /^면접 일정 등록 ·/ }))
+  const detail = screen.getByRole('dialog', { name: '김민지' })
+  expect(detail).not.toHaveAttribute('aria-modal', 'true')
+  expect(screen.getByRole('table', { name: '지원자 목록' })).toBeInTheDocument()
+  expect(screen.getByLabelText('면접 날짜')).toHaveFocus()
+  expect(within(detail).queryByRole('button', { name: '단계 정정' })).not.toBeInTheDocument()
+  expect(within(detail).getByRole('button', { name: /^처우 협의/ })).toBeInTheDocument()
+})
+test('keeps feedback draft while switching to support and back', async () => {
+  await start(); openDetail()
+  change(screen.getByRole('form', { name: '서류검토 피드백' }), '코멘트', '탭 이동 초안')
+  fireEvent.click(screen.getByRole('tab', { name: '지원 정보' }))
+  expect(screen.getByRole('button', { name: '단계 정정' })).toBeInTheDocument()
+  expect(screen.queryByRole('form', { name: '서류검토 피드백' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('tab', { name: '업무' }))
+  expect(screen.getByLabelText('코멘트')).toHaveValue('탭 이동 초안')
+})
+test('opens intake beside the title and restores trigger focus and unsaved input', async () => {
+  await start()
+  expect(screen.queryByRole('region', { name: '지원 접수 관리' })).not.toBeInTheDocument()
+  const trigger = screen.getByRole('button', { name: '지원 접수' }); trigger.focus(); fireEvent.click(trigger)
+  const dialog = screen.getByRole('dialog', { name: '지원 접수 및 가져오기' })
+  const form = openForm('지원 접수'); change(form, '지원자 이름', '접수 초안')
+  fireEvent.keyDown(dialog, { key: 'Escape' })
+  await waitFor(() => expect(trigger).toHaveFocus())
+  fireEvent.click(trigger)
+  expect(within(openForm('지원 접수')).getByLabelText('지원자 이름')).toHaveValue('접수 초안')
+})
+test('prevents switching applicant when a draft cannot be stored', async () => {
+  saveApplicants(createSeedApplicants(2, '2026-10-07')); await start()
+  fireEvent.click(screen.getByRole('button', { name: /지원자 상세 보기: 김민지/ }))
+  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  try {
+    change(screen.getByRole('form', { name: '서류검토 피드백' }), '코멘트', '유실 금지')
+    fireEvent.click(screen.getByRole('button', { name: /지원자 상세 보기: Alex Kim/ }))
+    expect(confirm).toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '김민지' })).toBeInTheDocument()
+    expect(screen.getByLabelText('코멘트')).toHaveValue('유실 금지')
+  } finally { storage.mockRestore(); confirm.mockRestore() }
+})
+
+test('keeps the toaster in the live detail after clicking the same work again', async () => {
+  await start()
+  const trigger = screen.getByRole('button', { name: /^평가 작성 ·/ })
+  fireEvent.click(trigger)
+  const feedback = screen.getByRole('form', { name: '서류검토 피드백' })
+  change(feedback, '점수', '86'); change(feedback, '코멘트', '알림 유지 검증')
+  fireEvent.click(within(feedback).getByRole('button', { name: '피드백 저장' }))
+  await screen.findByText('김민지님의 피드백을 저장했습니다.')
+  const host = document.querySelector('[data-sonner-toaster]')
+  expect(host).not.toBeNull()
+  fireEvent.click(trigger)
+  expect(screen.getByRole('dialog', { name: '김민지' })).toContainElement(host as HTMLElement)
+  expect(host?.isConnected).toBe(true)
+})
+test('focuses the current pending evaluation when a historical pending form precedes it', async () => {
+  const base = loadApplicants()[0]
+  saveApplicants([{ ...base, evaluations: [{ ...base.evaluations![0], id: 'old', active: false }, { ...base.evaluations![0], id: 'current', active: true }] }])
+  await start(); fireEvent.click(screen.getByRole('button', { name: /^평가 작성 ·/ }))
+  const forms = screen.getAllByRole('form', { name: '서류검토 피드백' })
+  expect(forms[1]).toContainElement(document.activeElement as HTMLElement)
+})
+
+test('preserves intake pending guard across closing and reopening the modal', async () => {
+  await start(); let form = openForm('지원 접수')
+  change(form, '지원자 이름', '재지원'); change(form, '지원자 이메일', 'applicant1@example.com'); change(form, '지원자 연락처', '010-0000'); change(form, '접수 경로', '추천'); change(form, '접수 포지션', 'position-frontend'); change(form, '동일인·재지원 연결', 'applicant-001')
+  const original = globalThis.fetch
+  let release: ((response: Response) => void) | undefined; let posts = 0
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (String(input) === '/api/applicants' && init?.method === 'POST') { posts++; return new Promise<Response>((resolve) => { release = resolve }) }
+    return original(input, init)
+  })
+  try {
+    save(form, '지원 접수'); await waitFor(() => expect(posts).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: '접수 창 닫기' }))
+    form = openForm('지원 접수')
+    expect(within(form).getByRole('button', { name: '저장 중' })).toBeDisabled()
+    fireEvent.submit(form)
+    expect(posts).toBe(1)
+  } finally { release?.(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })); fetch.mockRestore() }
 })

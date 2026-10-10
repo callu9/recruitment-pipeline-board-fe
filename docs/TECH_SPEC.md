@@ -736,3 +736,12 @@ npm run build
 - `리뷰/검증`에 실제로 확인한 사실과 수정 판단을 썼다.
 - 관련 설계 결정이 있으면 `DECISIONS.md`를 갱신했다.
 - 기능 코드와 기록이 같은 scope의 한 커밋에 들어간다.
+
+
+## 업무 중심 표시·패널 수명 — workspace-workflow
+
+- `model/applicantWork.ts`의 `getApplicantWork`는 기존 활성 업무 predicate로 표시용 추천을 계산한다. 변환·API·단계 선행조건 정책을 변경하지 않는다. 실행 가능한 종료 통보는 지원 상태 재개보다 먼저 연결한다.
+- desktop detail은 native `show()`로 목록 조작을 유지한다. 모달인 확인/접수는 `showModal()`을 유지한다. 지원자 변경 전 저장소 quota로 보존할 수 없는 초안은 기존 명시적 버리기 확인을 유지한다.
+- 지원자 교체/업무 재진입은 session draft를 복원한다. 상세 영역은 mounted hidden pane으로 유지한다. 평가 진입은 현재 활성·PENDING·선택된 마감의 평가에만 포커스한다.
+- 접수 `RecruitmentManagement`를 modal open 상태와 무관하게 유지하여 component-local lock/pending을 보존한다. 닫힌 접수 dialog는 Sonner host 대상에서 제외한다. 상세 재진입 sequence/확인/접수 상태로 기존 portal host를 현재 dialog에 다시 연결한다.
+- 검증용 Chrome profile/context와 합성 localStorage는 실제 사용자 데이터 및 브라우저 profile과 분리한다. 관련 전체 회귀와 실제 Chrome E2E를 기록하며 실제 운영 BE/권한 검증으로 주장하지 않는다.
