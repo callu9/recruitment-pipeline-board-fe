@@ -197,9 +197,11 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
   const taskSelection: RecordSelection<ApplicantOperation> = {
     field: 'id',
     values: (id) => {
-      if (!id) return { label: '', dueDate: '', done: 'false' }
+      if (!id) return { label: '', dueDate: '', done: 'false', base: '' }
       const task = latest().followUps?.find((item) => item.id === id)
-      return task && { label: task.label, dueDate: task.dueDate, done: String(task.done) }
+      // A contact-linked task carries its contact's baseline, so a completion chosen before the contact changed is rejected.
+      const contact = latest().contacts?.find((item) => item.id === id)
+      return task && { label: task.label, dueDate: task.dueDate, done: String(task.done), base: contact ? contactVersion(contact) : '' }
     },
     // Completing a contact-linked task can remove it; the form then returns to a new task instead of waiting for it.
     savedId: (operation) => operation.kind !== 'task' ? undefined : !operation.id ? latest().followUps?.at(-1)?.id : latest().followUps?.some(({ id }) => id === operation.id) ? operation.id : '',
@@ -251,8 +253,8 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
     {assignment && form('과제 관리', (data) => ({ kind: 'assignment', assignment: text(data, 'assignment'), dueDate: text(data, 'dueDate'), submitted: text(data, 'submitted') === 'true' }), <>
       <p>과제: {assignment} · {assignmentTask?.done ? '제출 확인' : '제출 미확인'}</p><label>과제 제출 기한<Input name="dueDate" type="date" required defaultValue={assignmentTask?.dueDate} /></label><label>제출 여부<NativeSelect name="submitted" defaultValue={String(assignmentTask?.done ?? false)}><NativeSelectOption value="false">안내·제출 대기</NativeSelectOption><NativeSelectOption value="true">제출 확인</NativeSelectOption></NativeSelect></label><input type="hidden" name="assignment" value={assignment} />
     </>, `${assignmentId}:${assignmentLabel}`, undefined, { dueDate: assignmentTask?.dueDate ?? '', submitted: String(assignmentTask?.done ?? false) })}
-    {form('후속 업무 관리', (data) => ({ kind: 'task', id: text(data, 'id') || undefined, label: text(data, 'label'), dueDate: text(data, 'dueDate'), done: text(data, 'done') === 'true' }), <>
-      <label>편집할 업무<NativeSelect name="id"><NativeSelectOption value="">새 업무</NativeSelectOption>{applicant.followUps?.filter(({ id }) => !id.startsWith('assignment-')).map((task) => <NativeSelectOption key={task.id} value={task.id}>{task.label} · {task.done ? '완료' : '대기'}</NativeSelectOption>)}</NativeSelect></label><label>후속 업무<Input name="label" required /></label><label>후속 업무 기한<Input name="dueDate" type="date" required /></label><small>연락에서 만든 업무의 날짜는 '연락 기록'에서 바꿉니다.</small><label>완료 상태<NativeSelect name="done"><NativeSelectOption value="false">대기</NativeSelectOption><NativeSelectOption value="true">완료</NativeSelectOption></NativeSelect></label>
+    {form('후속 업무 관리', (data) => ({ kind: 'task', id: text(data, 'id') || undefined, base: text(data, 'base') || undefined, label: text(data, 'label'), dueDate: text(data, 'dueDate'), done: text(data, 'done') === 'true' }), <>
+      <label>편집할 업무<NativeSelect name="id"><NativeSelectOption value="">새 업무</NativeSelectOption>{applicant.followUps?.filter(({ id }) => !id.startsWith('assignment-')).map((task) => <NativeSelectOption key={task.id} value={task.id}>{task.label} · {task.done ? '완료' : '대기'}</NativeSelectOption>)}</NativeSelect></label><label>후속 업무<Input name="label" required /></label><label>후속 업무 기한<Input name="dueDate" type="date" required /></label><small>연락에서 만든 업무의 날짜는 '연락 기록'에서 바꿉니다.</small><label>완료 상태<NativeSelect name="done"><NativeSelectOption value="false">대기</NativeSelectOption><NativeSelectOption value="true">완료</NativeSelectOption></NativeSelect></label><input type="hidden" name="base" />
     </>, undefined, taskSelection)}
     {applicant.followUps?.map((task) => <p key={task.id}>{task.label} · {formatWorkspaceDate(task.dueDate)} · {task.active === false ? '종료된 업무 이력' : task.done ? '완료' : '대기'}</p>)}
     {form('보관·복원', (data) => ({ kind: 'archive', archived: text(data, 'archived') === 'true', talentPool: text(data, 'talentPool') === 'true', reconnectDate: text(data, 'reconnectDate'), reason: text(data, 'reason') }), <>

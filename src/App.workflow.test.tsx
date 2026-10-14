@@ -596,3 +596,13 @@ test('Form sync R6: a reopened memo draft does not restore work fields changed b
   expect(within(form).getByLabelText('다음 행동')).toHaveValue(stored.nextAction)
   expect(within(form).getByLabelText('업무 기한')).toHaveValue(stored.dueDate ?? '')
 })
+test('Form sync R9: each Today queue opens the work of that queue', async () => {
+  const today = getLocalDateString()
+  const base = createSeedApplicants(1, '2026-10-07')[0]!
+  saveApplicants([{ ...base, stage: 'INTERVIEW', schedule: { date: today, startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'CONFIRMED', round: 1, active: true }, evaluations: [{ id: 'interview-1', type: 'INTERVIEW', status: 'PENDING', dueDate: today, reviewer: '김하나', round: 1, active: true }] }])
+  await start()
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^오늘 할 일/ }))
+  const section = (title: string) => screen.getByRole('heading', { name: title }).closest('section')!
+  expect(within(section('오늘의 인터뷰')).getByRole('button', { name: /^상세 보기:/ })).toHaveTextContent('면접 일정 확인')
+  expect(within(section('평가 작성 필요')).getByRole('button', { name: /^상세 보기:/ })).toHaveTextContent('평가 작성')
+})

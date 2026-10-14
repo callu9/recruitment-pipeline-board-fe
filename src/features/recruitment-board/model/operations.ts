@@ -8,7 +8,7 @@ export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule
   | { kind: 'offer'; conditions: string; proposedAt: string; responseDueDate: string; status: NonNullable<Applicant['offer']>['status']; reason: string }
   | { kind: 'employment'; plannedStartDate: string; actualStartDate: string }
   | { kind: 'lifecycle'; status: NonNullable<Applicant['lifecycle']>; reason: string }
-  | { kind: 'task'; id?: string; label: string; dueDate: string; done: boolean }
+  | { kind: 'task'; id?: string; base?: string; label: string; dueDate: string; done: boolean }
   | { kind: 'archive'; archived: boolean; talentPool: boolean; reconnectDate: string; reason: string }
   | { kind: 'delete'; confirmation: string; reason: string }
   | { kind: 'transfer'; positionId: string; reason: string }
@@ -100,6 +100,7 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const task = { id: operation.id || `task-${applicant.id}-${sequence}`, label: operation.label, dueDate: operation.dueDate, done: operation.done }
     if (operation.id && !applicant.followUps?.some(({ id }) => id === operation.id)) throw new Error('후속 업무를 찾을 수 없습니다.')
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
+    if (contact && operation.base !== undefined && operation.base !== contactVersion(contact)) throw new Error('다른 화면에서 이 연락이 바뀌었습니다. 업무를 다시 선택해 주세요.')
     // The contact owns the dates of tasks it created; editing them here would diverge from the contact record.
     if (contact && task.dueDate !== applicant.followUps?.find(({ id }) => id === task.id)?.dueDate) throw new Error('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
     if (contact && !task.done && applicant.followUps?.find(({ id }) => id === task.id)?.done) throw new Error('연락에서 만든 업무의 재개는 연락 기록에서 해 주세요.')

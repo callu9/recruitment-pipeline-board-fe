@@ -419,3 +419,13 @@ test('Form sync R7: contact history uses business wording instead of status code
   const applicant = applyApplicantOperation({ ...source(), followUps: [] }, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
   expect(applicant.timeline?.at(-1)?.label).toBe('수동 연락 예정 · 전화 · 안내 · 응답: ')
 })
+test('Form sync R9: completing a contact-linked task is checked against the contact it was selected with', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  const contact = applicant.contacts!.at(-1)!
+  const base = contactVersion(contact)
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', id: contact.id, base, channel: '전화', content: '안내', date: '2026-10-10', status: 'DONE', reply: '확인', followUpDate: '2026-10-22' }, '김하나', '2026-10-10')
+  const task = applicant.followUps!.find(({ id }) => id === contact.id)!
+  expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, base, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-11')).toThrow('다른 화면에서 이 연락이 바뀌었습니다.')
+  expect(applyApplicantOperation(applicant, { kind: 'task', id: task.id, base: contactVersion(applicant.contacts!.at(-1)!), label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-22').followUps!.find(({ id }) => id === task.id)?.done).toBe(true)
+})
