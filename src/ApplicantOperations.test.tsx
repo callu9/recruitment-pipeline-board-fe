@@ -71,3 +71,17 @@ test('Form sync R4: an open form whose record is removed elsewhere returns to a 
   expect(within(form).getByLabelText('후속 업무')).toHaveValue('')
   expect(within(form).getByLabelText<HTMLInputElement>('후속 업무 기한').readOnly).toBe(false)
 })
+test('Form sync R5: single-record forms follow stored changes but keep fields the user is editing', () => {
+  const applicant = { ...createSeedApplicants(1, '2026-10-07')[0]!, dueDate: '2026-10-30', nextAction: '서류 보완', offer: { conditions: '연봉', proposedAt: '2026-10-10', responseDueDate: '2026-10-12', status: 'SENT' as const, reason: '', active: true } }
+  const props = { actor: '김하나' as const, pending: false, save: async () => null, positions: SEED_POSITIONS }
+  const client = new QueryClient()
+  const { rerender } = render(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={applicant} /></QueryClientProvider>)
+  const work = screen.getByRole('form', { name: '담당 업무 편집' })
+  const offer = screen.getByRole('form', { name: '오퍼 관리' })
+  fireEvent.change(within(offer).getByLabelText('오퍼 조건'), { target: { value: '연봉 조정 중' } })
+  rerender(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={{ ...applicant, dueDate: undefined, nextAction: '인터뷰 일정 등록', offer: { ...applicant.offer, conditions: '다른 조건', status: 'ACCEPTED' as const } }} /></QueryClientProvider>)
+  expect(within(work).getByLabelText('업무 기한')).toHaveValue('')
+  expect(within(work).getByLabelText('다음 행동')).toHaveValue('인터뷰 일정 등록')
+  expect(within(offer).getByLabelText('오퍼 조건')).toHaveValue('연봉 조정 중')
+  expect(within(offer).getByLabelText('오퍼 상태')).toHaveValue('ACCEPTED')
+})

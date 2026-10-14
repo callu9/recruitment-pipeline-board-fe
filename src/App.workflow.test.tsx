@@ -557,3 +557,23 @@ test('Form sync R4: a memo saved while the detail was reopened is cleared from t
   await waitFor(() => expect(loadApplicants()[0].notes?.filter(({ text }) => text === '메모 A')).toHaveLength(1), { timeout: 4000 })
   await waitFor(() => expect(within(reopened).getByLabelText('새 메모')).toHaveValue(''))
 })
+test('Form sync R5: a memo saved after a stage change does not restore the previous stage work', async () => {
+  await start(); openDetail()
+  let form = openForm('담당 업무 편집')
+  change(form, '업무 기한', '2026-10-30'); change(form, '다음 행동', '서류 보완')
+  save(form, '담당 업무 편집')
+  await waitFor(() => expect(loadApplicants()[0]).toMatchObject({ dueDate: '2026-10-30', nextAction: '서류 보완' }), { timeout: 4000 })
+  fireEvent.click(within(screen.getByRole('dialog', { name: '김민지' })).getByRole('button', { name: /^면접 집행/ }))
+  const dialog = screen.getByRole('dialog', { name: '단계 변경 확인' })
+  change(dialog, '미완료 업무 확인 및 진행 사유', '면접에서 확인')
+  fireEvent.click(within(dialog).getByRole('button', { name: '확인' }))
+  await waitFor(() => expect(loadApplicants()[0].stage).toBe('INTERVIEW'), { timeout: 4000 })
+  const stored = loadApplicants()[0]
+  form = openForm('담당 업무 편집')
+  change(form, '새 메모', '면접 준비 메모')
+  save(form, '담당 업무 편집')
+  await waitFor(() => expect(loadApplicants()[0].notes?.some(({ text }) => text === '면접 준비 메모')).toBe(true), { timeout: 4000 })
+  // An empty due date is the work form's way of saying 'none'.
+  expect(loadApplicants()[0].dueDate || undefined).toBe(stored.dueDate)
+  expect(loadApplicants()[0].nextAction).toBe(stored.nextAction)
+})
