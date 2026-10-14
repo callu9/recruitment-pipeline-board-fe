@@ -1,4 +1,5 @@
-import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position, type SubmitApplicantFeedbackRequest } from '../features/recruitment-board/model/applicant.types'
+import { applyApplicantOperation, createApplication, findEmailConflict, validatePosition, type ApplicantOperation } from '../features/recruitment-board/model/operations'
+import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type ApplicantIntake, type Position, type SubmitApplicantFeedbackRequest } from '../features/recruitment-board/model/applicant.types'
 import { applyStageTransition, getLocalDateString, STAGES, submitApplicantEvaluation, type StageTransitionOptions } from '../features/recruitment-board/model/stages'
 import { createSeedApplicants, SEED_POSITIONS } from './seedApplicants'
 import {
@@ -62,8 +63,6 @@ export function saveApplicants(applicants: Applicant[]) {
 function hasMissingWorkspaceFields(applicant: Applicant) {
   return applicant.owner === undefined
     || applicant.positionId === undefined
-    || applicant.nextAction === undefined
-    || applicant.dueDate === undefined
     || applicant.schedule === undefined
     || applicant.evaluations === undefined
     || applicant.notes === undefined
@@ -164,4 +163,36 @@ export function loadPositions(): Position[] {
   }
   localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(SEED_POSITIONS))
   return SEED_POSITIONS
+}
+
+export function updateApplicantOperation(id: string, operation: ApplicantOperation, actor: Applicant['owner'] & string) {
+  const applicants = loadApplicants()
+  const applicant = applicants.find((item) => item.id === id)
+  if (!applicant) throw new Error('지원자를 찾을 수 없습니다.')
+  const conflict = operation?.kind === 'profile' && typeof operation.email === 'string' ? findEmailConflict(applicant, operation.email, applicants) : undefined
+  if (conflict) throw new Error(`동일 이메일 지원 건 ${conflict.id}가 있습니다. 동일인이면 지원 접수에서 연결해 주세요.`)
+  const updated = applyApplicantOperation(applicant, operation, actor, new Date().toISOString(), loadPositions())
+  saveApplicants(updated.deletedAt ? applicants.filter((item) => item.id !== id) : applicants.map((item) => item.id === id ? updated : item))
+  return updated
+}
+
+export function createApplicants(inputs: ApplicantIntake[], actor: Applicant['owner'] & string) {
+  if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 500) throw new Error('1–500건을 입력해 주세요.')
+  const existing = loadApplicants()
+  const all = [...existing]
+  const created: Applicant[] = []
+  for (const input of inputs) {
+    const applicant = createApplication(input, all, loadPositions(), actor, crypto.randomUUID(), new Date().toISOString())
+    all.push(applicant); created.push(applicant)
+  }
+  saveApplicants(all)
+  return created
+}
+export function savePosition(input: Position) {
+  validatePosition(input)
+  if (!APPLICANT_ROLES.includes(input.role)) throw new Error('직무를 확인해 주세요.')
+  const positions = loadPositions()
+  const position = { ...input, id: input.id || crypto.randomUUID() }
+  localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(positions.some(({ id }) => id === position.id) ? positions.map((item) => item.id === position.id ? position : item) : [...positions, position]))
+  return position
 }

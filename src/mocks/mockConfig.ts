@@ -1,7 +1,7 @@
 export const MIN_DELAY_MS = 200
 export const MAX_DELAY_MS = 800
 export const DEFAULT_FAILURE_RATE = 0.15
-export const DEFAULT_APPLICANT_SEED_SIZE = 240
+export const DEFAULT_APPLICANT_SEED_SIZE = 30
 export const PERFORMANCE_APPLICANT_SEED_SIZE = 1000
 
 export type ApplicantSeedSize =

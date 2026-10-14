@@ -6,8 +6,15 @@ import {
   type Position,
 } from '../features/recruitment-board/model/applicant.types'
 import { getLocalDateString, STAGES } from '../features/recruitment-board/model/stages'
+import { DEFAULT_APPLICANT_SEED_SIZE } from './mockConfig'
 
-const APPLICANT_NAMES = ['김민지', 'Alex Kim', '이서준', 'Jordan Lee', '박소연', 'Mina Patel']
+const APPLICANT_NAMES = [
+  '김민지', 'Alex Kim', '이서준', 'Jordan Lee', '박소연', 'Mina Patel',
+  '최유나', 'Sam Wilson', '정도윤', 'Taylor Chen', '강수빈', 'Jamie Park',
+  '윤지호', 'Morgan Davis', '임하은', 'Casey Nguyen', '한지우', 'Riley Brown',
+  '오예린', 'Avery Singh', '서준호', 'Cameron Miller', '신수아', 'Drew Garcia',
+  '권태현', 'Robin Choi', '황나연', 'Dana Lopez', '안현우', 'Quinn Smith',
+]
 
 export const SEED_POSITIONS: Position[] = [
   { id: 'position-frontend', title: 'Frontend Engineer', role: 'Frontend Developer', department: 'Product', requiredCount: 3, deadline: '2026-09-30', status: 'OPEN' },
@@ -27,7 +34,7 @@ function addDays(today: string, offset: number) {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
 }
 
-export function createSeedApplicants(size = 240, today = getLocalDateString()): Applicant[] {
+export function createSeedApplicants(size = DEFAULT_APPLICANT_SEED_SIZE, today = getLocalDateString()): Applicant[] {
   return Array.from({ length: size }, (_, index) => {
     const number = index + 1
     const role = APPLICANT_ROLES[index % APPLICANT_ROLES.length]
@@ -58,7 +65,9 @@ export function createSeedApplicants(size = 240, today = getLocalDateString()): 
 
     return {
       id: `applicant-${String(number).padStart(3, '0')}`,
-      name: APPLICANT_NAMES[index % APPLICANT_NAMES.length],
+      name: index < APPLICANT_NAMES.length
+        ? APPLICANT_NAMES[index]
+        : `${APPLICANT_NAMES[index % APPLICANT_NAMES.length]} ${number}`,
       role,
       appliedAt: `2026-08-${pad((index % 28) + 1)}T09:00:00.000Z`,
       stage,

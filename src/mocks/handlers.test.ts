@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { loadApplicants, saveApplicants, STORAGE_KEY } from './mockDb'
+import { loadApplicants, loadPositions, POSITIONS_STORAGE_KEY, saveApplicants, STORAGE_KEY } from './mockDb'
 import {
   DEFAULT_FAILURE_RATE,
   MAX_DELAY_MS,
@@ -22,13 +22,15 @@ afterEach(() => {
 })
 
 describe('mock applicants API', () => {
-  test('returns 240 seeded applicants', async () => {
+  test('returns 30 distinct seeded applicants for the default demo', async () => {
     setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
 
     const response = await fetch(applicantsUrl)
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toHaveLength(240)
+    const applicants = await response.json()
+    expect(applicants).toHaveLength(30)
+    expect(new Set(applicants.map(({ name }: { name: string }) => name)).size).toBe(30)
   })
 
   test('returns 503 when GET failure is forced', async () => {
@@ -55,7 +57,7 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'INTERVIEW' }),
+      body: JSON.stringify({ stage: 'INTERVIEW', overrideReason: '평가 없이 진행 승인' }),
     })
 
     expect(response.status).toBe(200)
@@ -99,7 +101,7 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'INTERVIEW' }),
+      body: JSON.stringify({ stage: 'INTERVIEW', overrideReason: '평가 없이 진행 승인' }),
     })
 
     expect(response.status).toBe(503)
@@ -112,7 +114,7 @@ describe('mock applicants API', () => {
     const response = await fetch(`${applicantsUrl}/applicant-001/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'INTERVIEW' }),
+      body: JSON.stringify({ stage: 'INTERVIEW', overrideReason: '평가 없이 진행 승인' }),
     })
 
     expect(response.status).toBe(503)
@@ -228,7 +230,7 @@ describe('mock applicants API', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
   })
 
-  test('rejects an evaluation from a different stage without changing storage', async () => {
+  test('allows completing an earlier stage evaluation and preserves the original stage', async () => {
     setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
     const applicants = loadApplicants()
     const applicant = applicants[0]!
@@ -248,9 +250,9 @@ describe('mock applicants API', () => {
       body: JSON.stringify({ reviewer: '김하나', score: 80, comment: '근거' }),
     })
 
-    expect(response.status).toBe(409)
-    await expect(response.json()).resolves.toMatchObject({ code: 'INVALID_EVALUATION' })
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ stage: applicant.stage, evaluations: expect.arrayContaining([expect.objectContaining({ id: otherEvaluation.id, status: 'SUBMITTED' })]) })
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBe(before)
   })
 
   test('rejects overwriting submitted feedback without changing storage', async () => {
@@ -354,7 +356,7 @@ describe('mock applicants API', () => {
       fetch(`${applicantsUrl}/applicant-001/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: 'INTERVIEW' }),
+        body: JSON.stringify({ stage: 'INTERVIEW', overrideReason: '평가 없이 진행 승인' }),
       }),
       fetch(`${applicantsUrl}/applicant-002/stage`, {
         method: 'PATCH',
@@ -372,5 +374,25 @@ describe('mock applicants API', () => {
         expect.objectContaining({ id: 'applicant-002', stage: 'REJECTED' }),
       ]),
     )
+  })
+})
+
+describe('G17 structured evaluation API', () => {
+  test('requires every position criterion score and persists them', async () => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+    const applicant = loadApplicants()[0]!
+    localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(loadPositions().map((position) => position.id === applicant.positionId ? { ...position, evaluationCriteria: '문제 해결\n협업' } : position)))
+    const evaluation = applicant.evaluations!.find(({ type }) => type === 'SCREEN')!
+    const url = `${applicantsUrl}/${applicant.id}/evaluations/${evaluation.id}`
+    const send = (criteriaScores?: unknown) => fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewer: '김하나', score: 80, comment: '근거', criteriaScores }) })
+    const before = localStorage.getItem(STORAGE_KEY)
+    for (const invalid of [undefined, [{ criterion: '문제 해결', score: 4 }], 'bad']) {
+      const response = await send(invalid)
+      expect(response.status).toBe(400)
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    }
+    const response = await send([{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 5 }])
+    expect(response.status).toBe(200)
+    expect(loadApplicants()[0]?.evaluations?.find(({ id }) => id === evaluation.id)?.criteriaScores).toEqual([{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 5 }])
   })
 })

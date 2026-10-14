@@ -31,8 +31,9 @@ afterEach(() => {
 })
 
 describe('loadApplicants', () => {
-  test('preserves valid stored applicants without replacing them with seed data', () => {
-    const storedApplicants = [{ ...createSeedApplicants(1)[0], name: 'Saved Applicant', stage: 'INTERVIEW' as const }]
+  test('preserves a larger stored list and edits even when applicant names repeat', () => {
+    const storedApplicants = createSeedApplicants(240).map((applicant) => ({ ...applicant, name: 'Saved Applicant' }))
+    storedApplicants[0] = { ...storedApplicants[0], stage: 'INTERVIEW', notes: [{ id: 'saved-note', author: '김하나', createdAt: '2026-10-07', text: '보존할 메모' }] }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedApplicants))
 
     expect(loadApplicants()).toEqual(storedApplicants)
@@ -115,7 +116,7 @@ describe('loadApplicants', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([applicant]))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    expect(loadApplicants()).toHaveLength(240)
+    expect(loadApplicants()).toHaveLength(30)
     expect(warn).toHaveBeenCalled()
   })
 })

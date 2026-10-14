@@ -1,3 +1,5 @@
+import { getApplicantWork, type ApplicantWorkTarget } from '../model/applicantWork'
+import { formatWorkspaceDueDate } from '../model/workspaceSelectors'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { EllipsisIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,20 +11,21 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Pagination, PaginationContent, PaginationItem } from '@/components/ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { APPLICANT_OWNERS, APPLICANT_ROLES, type Applicant, type ApplicantStage, type Position } from '../model/applicant.types'
-import { getAllowedNextStages, getForwardActionLabel, isTerminalStage, STAGES } from '../model/stages'
-import { EMPTY_FILTERS, filterWorkspaceApplicants, getStageCounts, hasPendingEvaluation, isOverdue, type ApplicantPageSize, type ApplicantSort, type paginateApplicants, type WorkspaceFilters } from '../model/workspaceSelectors'
+import { getLocalDateString, getAllowedNextStages, getForwardActionLabel, isTerminalStage, STAGES } from '../model/stages'
+import { EMPTY_FILTERS, isCurrentInterviewSchedule, filterWorkspaceApplicants, getStageCounts, getWorkDueDates, isRecruiting, hasPendingEvaluation, isOverdue, type ApplicantPageSize, type ApplicantSort, type paginateApplicants, type WorkspaceFilters } from '../model/workspaceSelectors'
 
-function dateLabel(value?: string) { return value ? value.slice(0, 10).replaceAll('-', '.') : '미정' }
+function dateLabel(value?: string) { return value ? getLocalDateString(value).replaceAll('-', '.') : '미정' }
 function applicantName(applicant: Applicant) { return `${applicant.name} · ${applicant.id}` }
 
-export function StageActionButtons({ applicant, isPending, onMove, onReject }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage, trigger?: HTMLButtonElement) => void; onReject: (trigger?: HTMLButtonElement) => void }) {
+export function StageActionButtons({ applicant, isPending, onMove, onReject, secondary = false }: { applicant: Applicant; isPending: boolean; onMove: (stage: ApplicantStage, trigger?: HTMLButtonElement) => void; onReject: (trigger?: HTMLButtonElement) => void; secondary?: boolean }) {
   const nextStage = getAllowedNextStages(applicant.stage).find((stage) => stage !== 'REJECTED')
   const trigger = useRef<HTMLButtonElement>(null)
   const [container, setContainer] = useState<HTMLDialogElement | undefined>()
+  if (applicant.archivedAt || (applicant.lifecycle && applicant.lifecycle !== 'ACTIVE')) return <span className="text-sm text-muted-foreground">{applicant.archivedAt ? '보관됨' : { ON_HOLD: '보류', WITHDRAWN: '철회', OFFER_DECLINED: '오퍼 거절', ACTIVE: '진행' }[applicant.lifecycle!]}</span>
   if (isTerminalStage(applicant.stage)) return <span className="text-sm text-muted-foreground">종료됨</span>
   const label = applicantName(applicant)
   return <div className="flex items-center gap-2" aria-label={`${label} 단계 액션`} aria-busy={isPending}>
-    {nextStage && <Button type="button" variant="outline" aria-label={`${getForwardActionLabel(applicant.stage)} · ${label}`} disabled={isPending} onClick={(event) => onMove(nextStage, event.currentTarget)}>{isPending ? '저장 중' : getForwardActionLabel(applicant.stage)}</Button>}
+    {nextStage && <Button type="button" variant={secondary ? "ghost" : "outline"} aria-label={`${getForwardActionLabel(applicant.stage)} · ${label}`} disabled={isPending} onClick={(event) => onMove(nextStage, event.currentTarget)}>{isPending ? '저장 중' : getForwardActionLabel(applicant.stage)}</Button>}
     <DropdownMenu onOpenChange={() => setContainer(trigger.current?.closest('dialog') ?? undefined)}>
       <DropdownMenuTrigger asChild><Button ref={trigger} type="button" variant="ghost" aria-label={`더 보기 · ${label}`} disabled={isPending}><EllipsisIcon /></Button></DropdownMenuTrigger>
       <DropdownMenuContent container={container} align="end"><DropdownMenuItem variant="destructive" aria-label={`불합격 처리 · ${label}`} onSelect={() => queueMicrotask(() => onReject(trigger.current ?? undefined))}>불합격 처리</DropdownMenuItem></DropdownMenuContent>
@@ -30,7 +33,9 @@ export function StageActionButtons({ applicant, isPending, onMove, onReject }: {
   </div>
 }
 
-export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortChange, onPageChange, onPageSizeChange, headingRef, hasOpenDialog, filters, setFilters, onSelect, selectedId, pendingIds, onMove, onReject, positions, positionsError, refetchPositions, today }: {
+export function ApplicantsView({ onIntake, emptyContext = 'applicants', applicants, pagination, pageSize, sort, onSortChange, onPageChange, onPageSizeChange, headingRef, hasOpenDialog, filters, setFilters, onSelect, selectedId, pendingIds, onMove, onReject, positions, positionsError, refetchPositions, today }: {
+  onIntake?: (trigger: HTMLButtonElement) => void
+  emptyContext?: 'applicants' | 'archive'
   applicants: Applicant[]
   pagination: ReturnType<typeof paginateApplicants>
   pageSize: ApplicantPageSize
@@ -42,7 +47,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
   hasOpenDialog: boolean
   filters: WorkspaceFilters
   setFilters: (next: WorkspaceFilters) => void
-  onSelect: (id: string, trigger?: HTMLButtonElement) => void
+  onSelect: (id: string, trigger?: HTMLButtonElement, target?: ApplicantWorkTarget) => void
   selectedId: string | null
   pendingIds: ReadonlySet<string>
   onMove: (applicant: Applicant, stage: ApplicantStage, trigger?: HTMLButtonElement) => void
@@ -91,7 +96,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
   return <section className="min-w-0" aria-labelledby="applicants-heading">
     <div className="my-6 flex flex-wrap items-center justify-between gap-2">
       <h2 id="applicants-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight">지원자 <span className="text-muted-foreground">{applicants.length}</span></h2>
-      <p className="text-sm text-muted-foreground">진행 중 {applicants.filter(({ stage }) => !isTerminalStage(stage)).length} · 평가 대기 {applicants.filter((item) => !isTerminalStage(item.stage) && hasPendingEvaluation(item)).length}</p>
+      <div className="flex items-center gap-3"><p className="text-sm text-muted-foreground">진행 중 {applicants.filter(isRecruiting).length} · 평가 대기 {applicants.filter((item) => !isTerminalStage(item.stage) && hasPendingEvaluation(item)).length}</p>{onIntake && <Button type="button" onClick={(event) => onIntake(event.currentTarget)}>지원 접수</Button>}</div>
     </div>
     {positionsError && <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive bg-background p-3 text-sm text-destructive" role="alert"><span>포지션 정보를 불러오지 못했습니다. 포지션 필터를 사용할 수 없습니다.</span><Button type="button" variant="outline" onClick={() => void refetchPositions()}>포지션 정보 다시 시도</Button></div>}
     <Collapsible open={expanded} onOpenChange={(open) => { if (!open && document.activeElement?.closest('[data-slot="collapsible-content"]')) filterToggle.current?.focus(); setExpanded(open) }}>
@@ -118,7 +123,7 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
       <p className="text-sm text-muted-foreground" role="status" aria-label="지원자 페이지 상태">총 {pagination.total}명{pagination.total > 0 && <> · {pagination.from}–{pagination.to}명<span className="sr-only"> · {pagination.page} / {pagination.totalPages} 페이지</span></>}</p>
       {pagination.total > 0 && <label className="flex items-center gap-2 text-sm"><span className="sr-only">페이지당 표시</span><NativeSelect value={pageSize} onChange={(event) => { const size = Number(event.target.value); if (size === 20 || size === 50 || size === 100) onPageSizeChange(size) }}>{([20, 50, 100] as const).map((size) => <NativeSelectOption key={size} value={size}>{size}명씩 보기</NativeSelectOption>)}</NativeSelect></label>}
     </div>
-    {pagination.total === 0 ? <div className="grid min-h-64 content-center justify-items-center gap-3 rounded-lg border bg-background p-6 text-center"><h3>조건에 맞는 지원자가 없습니다.</h3><p className="text-sm text-muted-foreground">검색어나 필터를 초기화해 다시 확인하세요.</p><Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>필터 초기화</Button></div> : <>
+    {pagination.total === 0 ? <div className="grid min-h-64 content-center justify-items-center gap-3 rounded-lg border bg-background p-6 text-center"><h3>{applicants.length === 0 ? emptyContext === 'archive' ? '아직 보관된 지원자가 없습니다.' : '등록된 지원자가 없습니다.' : '조건에 맞는 지원자가 없습니다.'}</h3><p className="text-sm text-muted-foreground">{applicants.length === 0 ? emptyContext === 'archive' ? '지원자 상세의 보관·복원에서 종료 기록을 보관하거나 인재풀에 등록하면 여기에 표시됩니다.' : '지원 접수 또는 가져오기로 채용 운영을 시작하세요.' : '검색어나 필터를 초기화해 다시 확인하세요.'}</p>{applicants.length > 0 && <Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>필터 초기화</Button>}</div> : <>
       <div className="rounded-lg border bg-background" onFocusCapture={(event) => { focusedRowControl.current = event.target as HTMLElement }}>
         <Table className="min-w-4xl"><caption className="sr-only">지원자 목록</caption>
           <TableHeader><TableRow><TableHead scope="col" sticky>지원자</TableHead><TableHead scope="col">단계</TableHead><TableHead scope="col">담당자</TableHead><TableHead scope="col">다음 액션</TableHead><TableHead scope="col">일정</TableHead><TableHead scope="col"><span className="sr-only">액션</span></TableHead></TableRow></TableHeader>
@@ -129,9 +134,9 @@ export function ApplicantsView({ applicants, pagination, pageSize, sort, onSortC
             <TableCell sticky><Button data-applicant-trigger type="button" variant="applicant" size="applicant" aria-label={`지원자 상세 보기: ${applicantName(applicant)}`} aria-pressed={selectedId === applicant.id} onClick={(event) => onSelect(applicant.id, event.currentTarget)}><span className="grid min-w-0 gap-1"><strong>{applicant.name}</strong><span className="truncate text-xs text-muted-foreground">{applicant.role} · 지원 {dateLabel(applicant.appliedAt)}</span></span></Button></TableCell>
             <TableCell><Badge variant={applicant.stage === 'REJECTED' ? 'destructive' : applicant.stage === 'HIRED' ? 'outline' : 'secondary'}>{STAGES.find(({ code }) => code === applicant.stage)?.label}</Badge></TableCell>
             <TableCell>{applicant.owner ?? '미지정'}</TableCell>
-            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{applicant.nextAction ?? '없음'}</span><small className="block text-xs text-muted-foreground">{dateLabel(applicant.dueDate)}</small></TableCell>
-            <TableCell>{applicant.schedule ? <><strong>{dateLabel(applicant.schedule.date)}</strong><small className="block text-xs text-muted-foreground">{applicant.schedule.startTime} · {applicant.schedule.format === 'VIDEO' ? '화상' : '대면'}</small></> : <span className="text-muted-foreground">미정</span>}</TableCell>
-            <TableCell><StageActionButtons applicant={applicant} isPending={pendingIds.has(applicant.id)} onMove={(stage, trigger) => onMove(applicant, stage, trigger)} onReject={(trigger) => onReject(applicant, trigger)} /></TableCell>
+            <TableCell><span className={isOverdue(applicant, today) ? 'font-semibold text-destructive' : ''}>{getApplicantWork(applicant, today).label}</span><small className="block text-xs text-muted-foreground">{formatWorkspaceDueDate(getApplicantWork(applicant, today).dueDate ?? getWorkDueDates(applicant)[0], isRecruiting(applicant), today)}</small></TableCell>
+            <TableCell>{isCurrentInterviewSchedule(applicant) && applicant.schedule ? <><strong>{dateLabel(applicant.schedule.date)}</strong><small className="block text-xs text-muted-foreground">{applicant.schedule.startTime} · {applicant.schedule.format === 'VIDEO' ? '화상' : '대면'}</small></> : <span className="text-muted-foreground">미정</span>}</TableCell>
+            <TableCell><div className="grid justify-items-start gap-1"><Button type="button" disabled={pendingIds.has(applicant.id)} aria-label={`${getApplicantWork(applicant, today).label} · ${applicantName(applicant)}`} onClick={(event) => onSelect(applicant.id, event.currentTarget, getApplicantWork(applicant, today).target)}>{getApplicantWork(applicant, today).label}</Button><StageActionButtons secondary applicant={applicant} isPending={pendingIds.has(applicant.id)} onMove={(stage, trigger) => onMove(applicant, stage, trigger)} onReject={(trigger) => onReject(applicant, trigger)} /></div></TableCell>
           </TableRow>)}</TableBody>
         </Table>
       </div>
