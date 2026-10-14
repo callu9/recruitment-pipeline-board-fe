@@ -107,3 +107,17 @@ test('Form sync: editing an existing position saves the selected record', async 
   await waitFor(() => expect(within(form).getByRole('status')).toHaveTextContent('저장했습니다'))
   expect((client.getQueryData(positionsQueryKey) as typeof SEED_POSITIONS).find(({ id }) => id === SEED_POSITIONS[0]!.id)?.evaluationCriteria).toBe('문제 해결')
 })
+test('Form sync R2: input typed while the edit target is still loading survives the list arriving', async () => {
+  const key = 'recruitment-operation-draft:position:포지션 개설·수정'
+  sessionStorage.setItem(key, JSON.stringify({ id: SEED_POSITIONS[0]!.id, title: '초안 제목' }))
+  const client = new QueryClient()
+  const view = (positions: typeof SEED_POSITIONS) => <QueryClientProvider client={client}><RecruitmentManagement positions={positions} applicants={[]} actor="김하나" mode="positions" /></QueryClientProvider>
+  const { rerender } = render(view([]))
+  const form = screen.getByRole('form', { name: '포지션 개설·수정' })
+  fireEvent.change(within(form).getByLabelText('부서'), { target: { value: '새 부서' } })
+  expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ id: SEED_POSITIONS[0]!.id, title: '초안 제목', department: '새 부서' })
+  rerender(view(SEED_POSITIONS))
+  await waitFor(() => expect(within(form).getByLabelText('편집할 포지션')).toHaveValue(SEED_POSITIONS[0]!.id))
+  expect(within(form).getByLabelText('부서')).toHaveValue('새 부서')
+  expect(within(form).getByLabelText('포지션명')).toHaveValue('초안 제목')
+})

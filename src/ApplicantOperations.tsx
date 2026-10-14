@@ -15,7 +15,7 @@ export interface RecordSelection<T> {
   field: string
   /** Stored field values of a record (defaults for ''); undefined while the record is not loaded yet. */
   values: (id: string) => Record<string, string> | undefined
-  /** The record the form edits after a successful save, e.g. the ID a create returned. */
+  /** The record the form edits after a successful save, e.g. the ID a create returned; '' when the saved record no longer exists. */
   savedId?: (operation: T) => string | undefined
   /** Fields that the selected record does not allow editing here. */
   locked?: (id: string) => string[]
@@ -73,14 +73,15 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   })
   function persistDraft() {
     try {
-      const values = Object.fromEntries(new FormData(ref.current!)) as Record<string, string>
-      // A record still loading keeps its ID in the draft even though its option is not rendered yet.
-      sessionStorage.setItem(key, JSON.stringify(waiting.current && selection ? { ...values, [selection.field]: waiting.current.id } : values)); setDraftError(false)
+      // While the record is still loading the fields are not filled yet, so the draft is the restored draft plus what was typed since.
+      const values = waiting.current && selection ? { ...waiting.current.draft, [selection.field]: waiting.current.id } : Object.fromEntries(new FormData(ref.current!))
+      sessionStorage.setItem(key, JSON.stringify(values)); setDraftError(false)
     } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }
   return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={(event) => {
     setSaved(false)
     if (selection && isField(event.target) && event.target.name === selection.field) { waiting.current = null; fill(event.target.value, {}) }
+    else if (waiting.current && isField(event.target)) waiting.current.draft = { ...waiting.current.draft, [event.target.name]: event.target.value }
     persistDraft()
   }} onSubmit={async (event) => {
     event.preventDefault()
@@ -98,7 +99,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
         }
         // Only this form's own draft key changes: a late response never touches another applicant's or form's fields.
         const savedId = selection?.savedId?.(operation)
-        if (savedId) savedSelections.set(key, savedId)
+        if (savedId !== undefined) savedSelections.set(key, savedId)
         try { if (savedId && selection) sessionStorage.setItem(key, JSON.stringify({ [selection.field]: savedId })); else sessionStorage.removeItem(key) } catch { setError('저장했습니다. 초안 정리는 브라우저 저장소 제한으로 실패했습니다.') }
         setDraftError(false); setSaved(true)
       }
@@ -129,7 +130,8 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
       const task = latest().followUps?.find((item) => item.id === id)
       return task && { label: task.label, dueDate: task.dueDate, done: String(task.done) }
     },
-    savedId: (operation) => operation.kind === 'task' ? operation.id ?? latest().followUps?.at(-1)?.id : undefined,
+    // Completing a contact-linked task can remove it; the form then returns to a new task instead of waiting for it.
+    savedId: (operation) => operation.kind !== 'task' ? undefined : !operation.id ? latest().followUps?.at(-1)?.id : latest().followUps?.some(({ id }) => id === operation.id) ? operation.id : '',
     // Dates of contact-linked tasks belong to the contact record.
     locked: (id) => latest().contacts?.some((contact) => contact.id === id) ? ['dueDate'] : [],
   }
