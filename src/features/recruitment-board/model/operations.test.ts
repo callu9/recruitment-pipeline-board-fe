@@ -370,11 +370,20 @@ test('PR review R4: cancelled rounds do not count as completed interview rounds'
   applicant = submitApplicantEvaluation(applicant, applicant.evaluations!.find(({ round }) => round === 2)!.id, { reviewer: '김하나', score: 85, comment: '근거' }, '2026-10-12')
   expect(getTransitionIssues(applicant, 'OFFER', positions).warnings).toContain('필요한 면접 회차의 평가가 완료되지 않았습니다.')
 })
-test('PR review R5: a due date edited on a contact-linked task survives the next contact save', () => {
+test('PR review R5/R6: dates of contact-linked tasks are edited only in the contact form', () => {
   let applicant: Applicant = { ...source(), followUps: [] }
   applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
   const contact = applicant.contacts!.at(-1)!
-  applicant = applyApplicantOperation(applicant, { kind: 'task', id: contact.id, label: applicant.followUps!.find(({ id }) => id === contact.id)!.label, dueDate: '2026-10-12', done: false }, '김하나', '2026-10-08')
-  applicant = applyApplicantOperation(applicant, { kind: 'contact', ...applicant.contacts!.at(-1)!, reply: '회신 대기', followUpDate: applicant.contacts!.at(-1)!.followUpDate ?? '' }, '김하나', '2026-10-09')
-  expect(applicant.followUps!.find(({ id }) => id === contact.id)?.dueDate).toBe('2026-10-12')
+  const task = applicant.followUps!.find(({ id }) => id === contact.id)!
+  expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: '2026-10-12', done: false }, '김하나', '2026-10-08')).toThrow('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
+  expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: '2026-10-09', done: true }, '김하나', '2026-10-08')).toThrow('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
+  const done = applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-10')
+  expect(done.contacts!.at(-1)).toMatchObject({ status: 'DONE', date: '2026-10-10' })
+})
+test('PR review final: an evaluation plan change does not reopen a cancelled interview round', () => {
+  let applicant: Applicant = { ...source(), stage: 'INTERVIEW', evaluations: [], schedule: null }
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-10', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'CANCELLED', round: 1 } }, '김하나', '2026-10-07')
+  const round1 = applicant.evaluations!.find(({ round }) => round === 1)!
+  applicant = applyApplicantOperation(applicant, { kind: 'evaluation-plan', evaluationId: round1.id, reviewer: '박민지', dueDate: '2026-10-20', reassess: false, reason: '담당 변경' }, '김하나', '2026-10-08')
+  expect(applicant.evaluations!.find(({ id }) => id === round1.id)?.active).toBe(false)
 })

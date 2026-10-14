@@ -61,7 +61,7 @@ export function getStageTransitionBlockers(applicant: Applicant, target: Applica
 }
 
 // A round whose latest schedule was cancelled, postponed or a no-show stays closed when the stage returns to INTERVIEW.
-function isClosedInterviewRound(applicant: Applicant, evaluation: ApplicantEvaluation) {
+export function isClosedInterviewRound(applicant: Applicant, evaluation: ApplicantEvaluation) {
   if (evaluation.type !== 'INTERVIEW' || !applicant.schedule) return false
   const round = evaluation.round ?? 1
   const latest = (applicant.schedule.round ?? 1) === round ? applicant.schedule : applicant.schedule.history?.findLast((item) => (item.round ?? 1) === round)

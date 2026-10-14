@@ -1,5 +1,5 @@
 import { APPLICANT_OWNERS, SCHEDULE_STATUS_LABELS, LIFECYCLE_LABELS, OFFER_STATUS_LABELS, type Applicant, type ApplicantOwner, type ApplicantStage, type ApplicantIntake, type InterviewSchedule, type Position, type ApplicantTimelineEvent } from './applicant.types'
-import { canRecordEmployment, getStageTransitionBlockers, retireRecruitmentWork, getCurrentStageEvaluation, getLocalDateString, STAGE_EVALUATION_TYPES, isTerminalStage } from './stages'
+import { canRecordEmployment, isClosedInterviewRound, getStageTransitionBlockers, retireRecruitmentWork, getCurrentStageEvaluation, getLocalDateString, STAGE_EVALUATION_TYPES, isTerminalStage } from './stages'
 
 export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule }
   | { kind: 'profile'; name: string; email: string; phone: string; resumeUrl: string; portfolioUrl: string; source: string }
@@ -40,8 +40,8 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (operation.reassess && evaluation.status !== 'SUBMITTED') throw new Error('기존 평가를 제출한 후 재평가를 등록해 주세요.')
     if (!operation.reassess && evaluation.status === 'SUBMITTED') throw new Error('제출된 평가는 재평가 또는 사유를 남긴 정정을 사용해 주세요.')
     const next = { ...evaluation, reviewer: operation.reviewer, dueDate: operation.dueDate }
-    if (!applicant.archivedAt && (!applicant.lifecycle || applicant.lifecycle === 'ACTIVE') && evaluation.type === STAGE_EVALUATION_TYPES[applicant.stage]) next.active = true
-    return log({ ...applicant, evaluations: operation.reassess ? [...(applicant.evaluations ?? []), { id: `reevaluation-${applicant.id}-${applicant.evaluations!.length + 1}`, type: evaluation.type, round: evaluation.round, status: 'PENDING', reviewer: operation.reviewer, dueDate: operation.dueDate, active: STAGE_EVALUATION_TYPES[applicant.stage] === evaluation.type }] : applicant.evaluations!.map((item) => item.id === evaluation.id ? next : item) }, `평가 ${operation.reassess ? '재평가 등록' : '계획 변경'} · ${operation.reason}`)
+    if (!applicant.archivedAt && (!applicant.lifecycle || applicant.lifecycle === 'ACTIVE') && evaluation.type === STAGE_EVALUATION_TYPES[applicant.stage] && !isClosedInterviewRound(applicant, evaluation)) next.active = true
+    return log({ ...applicant, evaluations: operation.reassess ? [...(applicant.evaluations ?? []), { id: `reevaluation-${applicant.id}-${applicant.evaluations!.length + 1}`, type: evaluation.type, round: evaluation.round, status: 'PENDING', reviewer: operation.reviewer, dueDate: operation.dueDate, active: STAGE_EVALUATION_TYPES[applicant.stage] === evaluation.type && !isClosedInterviewRound(applicant, evaluation) }] : applicant.evaluations!.map((item) => item.id === evaluation.id ? next : item) }, `평가 ${operation.reassess ? '재평가 등록' : '계획 변경'} · ${operation.reason}`)
   }
   if (operation.kind === 'contact') {
     requiredText(operation.channel, '연락 채널'); requiredText(operation.content, '연락 내용')
@@ -92,10 +92,10 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const task = { id: operation.id || `task-${applicant.id}-${sequence}`, label: operation.label, dueDate: operation.dueDate, done: operation.done }
     if (operation.id && !applicant.followUps?.some(({ id }) => id === operation.id)) throw new Error('후속 업무를 찾을 수 없습니다.')
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
+    // The contact owns the dates of tasks it created; editing them here would diverge from the contact record.
+    if (contact && task.dueDate !== applicant.followUps?.find(({ id }) => id === task.id)?.dueDate) throw new Error('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
     if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
-    // A contact-linked task keeps its source contact in step, or the next contact save would restore the old date.
-    const syncContact = (item: NonNullable<Applicant['contacts']>[number]) => task.done ? { ...item, followUpDate: '' } : item.status === 'PLANNED' ? { ...item, date: task.dueDate, followUpDate: item.followUpDate && item.followUpDate < task.dueDate ? task.dueDate : item.followUpDate } : { ...item, followUpDate: task.dueDate }
-    return log({ ...applicant, contacts: contact ? applicant.contacts?.map((item) => item.id === contact.id ? syncContact(item) : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
+    return log({ ...applicant, contacts: task.done && contact ? applicant.contacts?.map((item) => item.id === contact.id ? { ...item, followUpDate: '' } : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
   }
   if (operation.kind === 'assignment') {
     const status = getAssignmentStatus(applicant, positions)

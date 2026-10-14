@@ -31,7 +31,8 @@ type PendingConfirmation = { applicant: Applicant; targetStage: ApplicantStage; 
 function dateLabel(value?: string) { return value ? getLocalDateString(value).replaceAll('-', '.') : '미정' }
 function fullDateLabel(value?: string) { return value ? getLocalDateString(value).replaceAll('-', '.') : '미정' }
 function stageLabel(stage: ApplicantStage) { return STAGES.find(({ code }) => code === stage)?.label ?? stage }
-function stageLabelForEvaluation(type: EvaluationType) { return EVALUATION_TYPE_LABELS[type] }
+// Interview rounds share a type, so the round tells them apart in the list and the form name.
+function stageLabelForEvaluation(type: EvaluationType, round?: number) { return type === 'INTERVIEW' ? `${EVALUATION_TYPE_LABELS[type]} ${round ?? 1}회차` : EVALUATION_TYPE_LABELS[type] }
 function typeLabel(type: CalendarEvent['type']) { return { INTERVIEW: '인터뷰', EVALUATION: '평가', OFFER: '처우', START_DATE: '입사', FOLLOW_UP: '후속 업무' }[type] }
 function accessibleApplicantName(applicant: Applicant) { return `${applicant.name} · ${applicant.id}` }
 
@@ -112,7 +113,7 @@ function FeedbackForm({ evaluation, criteria, isPending, error, onSubmit }: {
     try { sessionStorage.setItem(draftKey, JSON.stringify(next)); setDraftError(false) } catch { setDraftError(true) }
   }
   if (!editing) return <button type="button" disabled={isPending} onClick={() => setEditing(true)}>평가 정정</button>
-  return <form className={styles.feedbackForm} aria-label={`${stageLabelForEvaluation(evaluation.type)} 피드백`} data-draft-error={draftError || undefined} aria-busy={isPending} onSubmit={(event) => {
+  return <form className={styles.feedbackForm} aria-label={`${stageLabelForEvaluation(evaluation.type, evaluation.round)} 피드백`} data-draft-error={draftError || undefined} aria-busy={isPending} onSubmit={(event) => {
     event.preventDefault()
     onSubmit({ reviewer, score: Number(score), comment, correctionReason: correctionReason.trim() || undefined, criteriaScores: criteria.length ? criteria.map((criterion) => ({ criterion, score: Number(criteriaScores[criterion]) })) : undefined })
   }}>
@@ -170,7 +171,7 @@ function ApplicantDetail({ initialTarget, applicant, positions, onClose, onMove,
     <div role="tabpanel" id={`${titleId}-pane-work`} aria-labelledby={`${titleId}-tab-work`} hidden={pane !== 'work'}>
       <section className={styles.workSummary}><h3>{work.label}</h3><p>{work.reason}</p><p>{formatWorkspaceDueDate(work.dueDate, Boolean(work.dueDate))}</p><Button type="button" disabled={isPending} onClick={openWork}>{work.label}</Button></section>
     <section data-work-target="evaluation" className={styles.detailSection} aria-labelledby={`${titleId}-evaluation`}><h3 id={`${titleId}-evaluation`}>평가</h3><div className={styles.evaluationList}>{(applicant.evaluations ?? []).map((evaluation) => <div data-current-work={isActiveEvaluation(applicant, evaluation) && evaluation.status === "PENDING" && evaluation.dueDate === work.dueDate || undefined} className={styles.evaluation} key={evaluation.id}>
-      <span>{EVALUATION_TYPE_LABELS[evaluation.type]}</span>
+      <span>{stageLabelForEvaluation(evaluation.type, evaluation.round)}</span>
       <StatusPill tone={evaluation.status === 'PENDING' ? 'amber' : 'green'}>{evaluation.status === 'PENDING' ? '작성 필요' : `${evaluation.score ?? '—'}점`}</StatusPill>
       <small>{evaluation.reviewer} · {evaluation.submittedAt ? `작성 ${fullDateLabel(evaluation.submittedAt)}` : `마감 ${dateLabel(evaluation.dueDate)}`}</small>
       {evaluation.comment && <p className={styles.evaluationComment}>{evaluation.comment}</p>}
