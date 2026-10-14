@@ -428,3 +428,34 @@ test('preserves intake pending guard across closing and reopening the modal', as
     expect(posts).toBe(1)
   } finally { release?.(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })); fetch.mockRestore() }
 })
+
+test('PR review R2: feedback form follows a reviewer reassigned by the evaluation plan', async () => {
+  await start(); openDetail()
+  const plan = screen.getByRole('form', { name: '평가 계획·재평가' })
+  change(plan, '계획 평가자', '박민지'); change(plan, '평가 기한', '2026-10-20'); change(plan, '평가 계획 사유', '담당 변경')
+  save(plan, '평가 계획·재평가')
+  await waitFor(() => expect(loadApplicants()[0].evaluations?.find(({ type }) => type === 'SCREEN')?.reviewer).toBe('박민지'), { timeout: 4000 })
+  await waitFor(() => expect(within(screen.getByRole('form', { name: '서류검토 피드백' })).getByLabelText('평가자')).toHaveValue('박민지'))
+})
+test('PR review R2: leaving positions asks before discarding a position draft that could not be stored', async () => {
+  await start()
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^포지션/ }))
+  const form = await screen.findByRole('form', { name: '포지션 개설·수정' })
+  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  try {
+    change(form, '포지션명', '유실 금지')
+    fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^지원자/ }))
+    expect(confirm).toHaveBeenCalled()
+    expect(within(screen.getByRole('form', { name: '포지션 개설·수정' })).getByLabelText('포지션명')).toHaveValue('유실 금지')
+  } finally { storage.mockRestore(); confirm.mockRestore() }
+})
+test('PR review R2: visiting an empty archive does not reset the applicants page', async () => {
+  saveApplicants(createSeedApplicants(45))
+  window.history.replaceState(null, '', '?page=2&size=20')
+  await start()
+  const nav = within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' }))
+  fireEvent.click(nav.getByRole('button', { name: /^보관·인재풀/ }))
+  fireEvent.click(nav.getByRole('button', { name: /^지원자/ }))
+  expect(await screen.findByRole('status', { name: '지원자 페이지 상태' })).toHaveTextContent('2 / 3 페이지')
+})

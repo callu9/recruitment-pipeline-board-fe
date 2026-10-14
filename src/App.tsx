@@ -99,6 +99,9 @@ function FeedbackForm({ evaluation, criteria, isPending, error, onSubmit }: {
   const [editing, setEditing] = useState(evaluation.status === 'PENDING')
   const [correctionReason, setCorrectionReason] = useState(draft?.correctionReason ?? '')
   const [reviewer, setReviewer] = useState<ApplicantOwner>(draft?.reviewer ?? evaluation.reviewer)
+  // A reviewer reassigned by the evaluation plan replaces the form's reviewer; score and comment drafts stay.
+  const [plannedReviewer, setPlannedReviewer] = useState(evaluation.reviewer)
+  if (plannedReviewer !== evaluation.reviewer) { setPlannedReviewer(evaluation.reviewer); setReviewer(evaluation.reviewer) }
   const [score, setScore] = useState(draft?.score ?? evaluation.score?.toString() ?? '')
   const [comment, setComment] = useState(draft?.comment ?? evaluation.comment ?? '')
   const [criteriaScores, setCriteriaScores] = useState<Record<string, string>>(() => draft?.criteriaScores ?? Object.fromEntries((evaluation.criteriaScores ?? []).map(({ criterion, score }) => [criterion, String(score)])))
@@ -225,7 +228,7 @@ function IntakeDialog({ open, children, onClose }: { open: boolean; children: Re
   function close() { if (!ref.current?.querySelector('[data-draft-error="true"]') || window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?')) ref.current?.close() }
   return <dialog ref={ref} data-intake-open={open} className={styles.intakeDialog} aria-labelledby="intake-heading" onCancel={(event) => { event.preventDefault(); close() }} onKeyDown={(event) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); close() } }}><header className={styles.detailHeader}><h2 id="intake-heading">지원 접수 및 가져오기</h2><Button variant="outline" type="button" onClick={close} aria-label="접수 창 닫기">닫기</Button></header>{children}</dialog>
 }
-function canLeaveWorkspaceDraft() { return !document.querySelector('dialog [data-draft-error="true"]') || window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?') }
+function canLeaveWorkspaceDraft() { return !document.querySelector('[data-draft-error="true"]') || window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?') }
 
 function App() {
   const { data: storedApplicants = [], isPending: applicantsPending, isError: applicantsError, refetch: refetchApplicants } = useApplicantsQuery(); const { data: positions = [], isPending: positionsPending, isError: positionsError, refetch: refetchPositions } = usePositionsQuery(); const [intakeOpen, setIntakeOpen] = useState(false); const intakeTrigger = useRef<HTMLButtonElement | null>(null); const [detailRequest, setDetailRequest] = useState<{ target?: ApplicantWorkTarget; sequence: number }>({ sequence: 0 }); const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null); const cancelHistoryConfirmation = useCallback(() => { setConfirmation(null); setIntakeOpen(false) }, []); const { view, filters, sort, page, pageSize, selectedId, setView, setFilters, setSort, setPage, setPageSize, setSelectedId, navigate } = useWorkspaceNavigation(cancelHistoryConfirmation); const [feedbackSaveError, setFeedbackSaveError] = useState<{ applicantId: string; evaluationId: string; message: string } | null>(null); const [retryingApplicants, setRetryingApplicants] = useState(false); const today = getLocalDateString(); const detailTrigger = useRef<HTMLButtonElement | null>(null); const applicantsHeading = useRef<HTMLHeadingElement | null>(null); const restoreTrigger = useRef<{ trigger: HTMLButtonElement | null } | null>(null)
@@ -253,7 +256,8 @@ function App() {
   const selectedApplicant = applicants.find((applicant) => applicant.id === selectedId); const activeApplicants = applicants.filter(isRecruiting); const todayInterviews = getTodayInterviews(applicants, today); const missingEvaluations = getMissingEvaluations(applicants); const todayActionable = getTodayActionableApplicants(applicants, today)
   const visibleApplicants = applicants.filter((applicant) => view === 'archive' ? isArchiveOrTalentPool(applicant) : !applicant.archivedAt)
   const pagination = paginateApplicants(sortWorkspaceApplicants(filterWorkspaceApplicants(visibleApplicants, filters, today), sort, today), page, pageSize)
-  useLayoutEffect(() => { if (!applicantsPending && !applicantsError && page !== pagination.page) setPage(pagination.page) }, [applicantsPending, applicantsError, page, pagination.page, setPage])
+  // The archive shares the page state with applicants, so only the applicants list may clamp it.
+  useLayoutEffect(() => { if (view !== 'archive' && !applicantsPending && !applicantsError && page !== pagination.page) setPage(pagination.page) }, [view, applicantsPending, applicantsError, page, pagination.page, setPage])
   const previousSelection = useRef(selectedId)
   useLayoutEffect(() => {
     if (previousSelection.current && !selectedId && !restoreTrigger.current) {

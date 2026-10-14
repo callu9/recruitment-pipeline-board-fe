@@ -47,7 +47,7 @@ export function useWorkspaceNavigation(onRestore: () => void) {
   useEffect(() => {
     const restore = () => {
       const next = readWorkspaceUrl(window.location.search)
-      if (document.querySelector('dialog [data-draft-error="true"]') && !window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?')) {
+      if (document.querySelector('[data-draft-error="true"]') && !window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?')) {
         window.history.pushState(window.history.state, '', stateUrl(current.current))
         return
       }
