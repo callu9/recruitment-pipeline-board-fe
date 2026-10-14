@@ -31,6 +31,7 @@ export function RecruitmentManagement({ positions, applicants, actor, mode }: { 
       return position && Object.fromEntries(POSITION_FIELDS.map((name) => [name, String(position[name] ?? defaults[name] ?? '')]))
     },
     savedId: () => lastSavedPosition.id,
+    loaded: () => client.getQueryData(positionsQueryKey) !== undefined || positions.length > 0,
   }
   async function post(endpoint: 'applicants' | 'positions', body: unknown) {
     if (saving.has(endpoint)) return '저장 중입니다.'

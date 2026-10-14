@@ -102,6 +102,7 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
     // The contact owns the dates of tasks it created; editing them here would diverge from the contact record.
     if (contact && task.dueDate !== applicant.followUps?.find(({ id }) => id === task.id)?.dueDate) throw new Error('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
+    if (contact && !task.done && applicant.followUps?.find(({ id }) => id === task.id)?.done) throw new Error('연락에서 만든 업무의 재개는 연락 기록에서 해 주세요.')
     if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, base: undefined, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
     return log({ ...applicant, contacts: task.done && contact ? applicant.contacts?.map((item) => item.id === contact.id ? { ...item, followUpDate: '' } : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
   }

@@ -407,3 +407,11 @@ test('PR review R8: the request baseline is not stored on the contact and a late
   const task = applicant.followUps!.find(({ id }) => id === contact.id)!
   expect(applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-12').contacts!.at(-1)).toMatchObject({ status: 'DONE' })
 })
+test('Form sync R3: a completed contact-linked task is reopened only from the contact form', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'DONE', reply: '확인', followUpDate: '2026-10-15' }, '김하나', '2026-10-10')
+  const contact = applicant.contacts!.at(-1)!
+  const task = applicant.followUps!.find(({ id }) => id === contact.id)!
+  applicant = applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-15')
+  expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: false }, '김하나', '2026-10-16')).toThrow('연락에서 만든 업무의 재개는 연락 기록에서 해 주세요.')
+})

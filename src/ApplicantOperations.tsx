@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { EVALUATION_TYPE_LABELS, EVALUATION_STATUS_LABELS } from './features/recruitment-board/model/stages'
 import { Button } from '@/components/ui/button'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { applicantsQueryKey } from './features/recruitment-board/api/useApplicantsQuery'
 import { APPLICANT_OWNERS, SCHEDULE_STATUS_LABELS, LIFECYCLE_LABELS, OFFER_STATUS_LABELS, type Applicant, type ApplicantOwner, type Position } from './features/recruitment-board/model/applicant.types'
@@ -17,6 +17,8 @@ export interface RecordSelection<T> {
   values: (id: string) => Record<string, string> | undefined
   /** The record the form edits after a successful save, e.g. the ID a create returned; '' when the saved record no longer exists. */
   savedId?: (operation: T) => string | undefined
+  /** Whether the records' source has loaded; a missing record then means it was removed, not that it is still loading. Defaults to true. */
+  loaded?: () => boolean
   /** Fields that the selected record does not allow editing here. */
   locked?: (id: string) => string[]
 }
@@ -35,9 +37,12 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   const waiting = useRef<{ id: string; draft: Record<string, string> } | null>(null)
   const selectionRef = useRef(selection)
   selectionRef.current = selection
-  function fill(recordId: string, draft: Record<string, string>) {
+  // Uses refs only, so it is stable across renders.
+  const fill = useCallback(function fill(recordId: string, draft: Record<string, string>): boolean {
     const current = selectionRef.current!
     const stored = current.values(recordId)
+    // A removed record (e.g. a contact-linked task completed elsewhere) returns the form to a new record instead of waiting forever.
+    if (recordId && !stored && (current.loaded?.() ?? true)) return fill('', {})
     const form = ref.current
     const select = form?.elements.namedItem(current.field)
     // The record's option renders after the parent receives the saved data; until then the select could not hold its ID.
@@ -49,7 +54,8 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     }
     for (const element of Array.from(form.elements)) if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.readOnly = locked.includes(element.name)
     return true
-  }
+  }, [])
+
   useEffect(() => {
     // A fresh mount restores the saved ID from the draft; the registry only serves instances that lived through the save.
     savedSelections.delete(key)
@@ -65,7 +71,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
       const field = ref.current?.elements.namedItem(name)
       if (isField(field)) field.value = value
     }
-  }, [key])
+  }, [key, fill])
   useEffect(() => {
     const savedId = savedSelections.get(key)
     if (savedId !== undefined && selectionRef.current) { savedSelections.delete(key); waiting.current = { id: savedId, draft: {} } }

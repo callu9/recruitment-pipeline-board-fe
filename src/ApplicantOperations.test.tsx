@@ -1,6 +1,6 @@
 import type React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, test } from 'vitest'
 import { ApplicantOperations } from './ApplicantOperations'
 import { createSeedApplicants, SEED_POSITIONS } from './mocks/seedApplicants'
@@ -43,5 +43,17 @@ test('Form sync P3: a restored contact-linked task keeps its date read-only', ()
   expect(within(form).getByLabelText('편집할 업무')).toHaveValue(contact.id)
   expect(within(form).getByLabelText<HTMLInputElement>('후속 업무 기한').readOnly).toBe(true)
   expect(within(form).getByLabelText('후속 업무')).toHaveValue('연락 예정: 안내')
+  sessionStorage.clear()
+})
+test('Form sync R3: a draft pointing at a task that no longer exists returns to a new task', async () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  sessionStorage.setItem(`recruitment-operation-draft:${applicant.id}:후속 업무 관리`, JSON.stringify({ id: 'contact-gone-1' }))
+  const saves: unknown[] = []
+  render(<QueryClientProvider client={new QueryClient()}><ApplicantOperations actor="김하나" pending={false} save={async (operation) => { saves.push(operation); return null }} positions={SEED_POSITIONS} applicant={{ ...applicant, followUps: [] }} /></QueryClientProvider>)
+  const form = screen.getByRole('form', { name: '후속 업무 관리' })
+  fireEvent.change(within(form).getByLabelText('후속 업무'), { target: { value: '서류 보완 요청' } })
+  fireEvent.change(within(form).getByLabelText('후속 업무 기한'), { target: { value: '2026-10-21' } })
+  fireEvent.submit(form)
+  await waitFor(() => expect(saves).toEqual([{ kind: 'task', id: undefined, label: '서류 보완 요청', dueDate: '2026-10-21', done: false }]))
   sessionStorage.clear()
 })
