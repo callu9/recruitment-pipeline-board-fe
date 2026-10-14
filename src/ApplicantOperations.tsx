@@ -22,8 +22,8 @@ export interface RecordSelection<T> {
   /** Fields that the selected record does not allow editing here. */
   locked?: (id: string) => string[]
 }
-// Saved record IDs by draft key, for a form instance remounted while its save was in flight. The key scopes it to one applicant's form.
-const savedSelections = new Map<string, string>()
+// Save results by draft key, for a form instance remounted while its save was in flight. The key scopes it to one applicant's form.
+const savedResults = new Map<string, { id?: string; clear: string[] }>()
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 const isField = (value: unknown): value is Field => value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement || value instanceof HTMLSelectElement
 
@@ -37,6 +37,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   const waiting = useRef<{ id: string; draft: Record<string, string> } | null>(null)
   const selectionRef = useRef(selection)
   selectionRef.current = selection
+  const selected = useRef('')
   // Uses refs only, so it is stable across renders.
   const fill = useCallback(function fill(recordId: string, draft: Record<string, string>): boolean {
     const current = selectionRef.current!
@@ -53,12 +54,13 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
       if (isField(field)) field.value = value
     }
     for (const element of Array.from(form.elements)) if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.readOnly = locked.includes(element.name)
+    selected.current = recordId
     return true
   }, [])
 
   useEffect(() => {
     // A fresh mount restores the saved ID from the draft; the registry only serves instances that lived through the save.
-    savedSelections.delete(key)
+    savedResults.delete(key)
     let values: Record<string, string> = {}
     try { values = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, string> } catch { /* A corrupt draft does not prevent editing the saved record. */ }
     const current = selectionRef.current
@@ -73,9 +75,21 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     }
   }, [key, fill])
   useEffect(() => {
-    const savedId = savedSelections.get(key)
-    if (savedId !== undefined && selectionRef.current) { savedSelections.delete(key); waiting.current = { id: savedId, draft: {} } }
+    const result = savedResults.get(key)
+    if (result) {
+      savedResults.delete(key)
+      let cleared = false
+      for (const name of result.clear) {
+        const field = ref.current?.elements.namedItem(name)
+        if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.value) { field.value = ''; cleared = true }
+      }
+      if (cleared) persistDraft()
+      if (result.id !== undefined && selectionRef.current) waiting.current = { id: result.id, draft: {} }
+    }
     if (waiting.current && fill(waiting.current.id, waiting.current.draft)) waiting.current = null
+    // The record being edited was removed by another form (e.g. its contact was completed): start a new record rather than save stale fields.
+    const current = selectionRef.current
+    if (!waiting.current && current && selected.current && !current.values(selected.current) && (current.loaded?.() ?? true)) { fill('', {}); persistDraft() }
   })
   function persistDraft() {
     try {
@@ -105,7 +119,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
         }
         // Only this form's own draft key changes: a late response never touches another applicant's or form's fields.
         const savedId = selection?.savedId?.(operation)
-        if (savedId !== undefined) savedSelections.set(key, savedId)
+        savedResults.set(key, { id: savedId, clear: clearAfterSave })
         try { if (savedId && selection) sessionStorage.setItem(key, JSON.stringify({ [selection.field]: savedId })); else sessionStorage.removeItem(key) } catch { setError('저장했습니다. 초안 정리는 브라우저 저장소 제한으로 실패했습니다.') }
         setDraftError(false); setSaved(true)
       }

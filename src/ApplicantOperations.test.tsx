@@ -57,3 +57,17 @@ test('Form sync R3: a draft pointing at a task that no longer exists returns to 
   await waitFor(() => expect(saves).toEqual([{ kind: 'task', id: undefined, label: '서류 보완 요청', dueDate: '2026-10-21', done: false }]))
   sessionStorage.clear()
 })
+test('Form sync R4: an open form whose record is removed elsewhere returns to a new record', () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  const contact = { id: `contact-${applicant.id}-1`, channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED' as const, reply: '', actor: '김하나' as const }
+  const props = { actor: '김하나' as const, pending: false, save: async () => null, positions: SEED_POSITIONS }
+  const client = new QueryClient()
+  const { rerender } = render(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={{ ...applicant, contacts: [contact], followUps: [{ id: contact.id, label: '연락 예정: 안내', dueDate: '2026-10-10', done: false }] }} /></QueryClientProvider>)
+  const form = screen.getByRole('form', { name: '후속 업무 관리' })
+  fireEvent.change(within(form).getByLabelText('편집할 업무'), { target: { value: contact.id } })
+  expect(within(form).getByLabelText('후속 업무')).toHaveValue('연락 예정: 안내')
+  rerender(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={{ ...applicant, contacts: [{ ...contact, status: 'DONE' }], followUps: [] }} /></QueryClientProvider>)
+  expect(within(form).getByLabelText('편집할 업무')).toHaveValue('')
+  expect(within(form).getByLabelText('후속 업무')).toHaveValue('')
+  expect(within(form).getByLabelText<HTMLInputElement>('후속 업무 기한').readOnly).toBe(false)
+})

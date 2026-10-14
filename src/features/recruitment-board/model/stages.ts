@@ -194,7 +194,8 @@ export function applyStageTransition(
     rejectionReason: targetStage === 'REJECTED' ? options.rejectionReason?.trim() : undefined,
     rejectionMemo: targetStage === 'REJECTED' ? options.rejectionMemo?.trim() || undefined : undefined,
     evaluations: evaluations?.map((evaluation) => ({ ...evaluation, active: evaluation.type === targetEvaluationType && !isClosedInterviewRound(applicant, evaluation) })),
-    schedule: applicant.schedule ? { ...applicant.schedule, active: targetStage === 'INTERVIEW' } : applicant.schedule,
+    // Returning to INTERVIEW reopens only a still-planned schedule; completed, cancelled, postponed or no-show ones need a new registration.
+    schedule: applicant.schedule ? { ...applicant.schedule, active: targetStage === 'INTERVIEW' && ['PLANNED', 'CONFIRMED'].includes(applicant.schedule.status ?? 'PLANNED') } : applicant.schedule,
     dueDate: undefined,
     offer: applicant.offer && (applicant.stage === 'REJECTED' || !['OFFER', 'HIRED'].includes(targetStage)) ? { ...applicant.offer, active: false } : applicant.offer,
     employment: applicant.employment && targetStage !== 'HIRED' ? { ...applicant.employment, active: false } : applicant.employment,

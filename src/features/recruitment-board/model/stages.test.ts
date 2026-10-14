@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { createSeedApplicants } from '../../../mocks/seedApplicants'
 import {
   applyStageTransition,
   canTransitionTo,
@@ -157,4 +158,12 @@ test('does not duplicate an evaluation that already exists for the target stage'
   const updated = applyStageTransition(applicant, 'INTERVIEW', '2026-09-08')
 
   expect(updated.evaluations?.filter(({ type }) => type === 'INTERVIEW')).toHaveLength(1)
+})
+test('Form sync R4: returning to the interview stage does not reactivate a cancelled schedule', () => {
+  const base = { ...createSeedApplicants(1, '2026-10-07')[0]!, stage: 'INTERVIEW' as const, schedule: { date: '2026-10-10', startTime: '10:00', endTime: '11:00', format: 'VIDEO' as const, interviewer: '김하나', status: 'CANCELLED' as const, round: 1, active: false } }
+  const rejected = applyStageTransition(base, 'REJECTED', '2026-10-11', { rejectionReason: '역량 미달' })
+  const corrected = applyStageTransition(rejected, 'INTERVIEW', '2026-10-12', { correction: true })
+  expect(corrected.schedule?.active).toBe(false)
+  const planned = applyStageTransition(applyStageTransition({ ...base, schedule: { ...base.schedule, status: 'PLANNED' as const, active: true } }, 'REJECTED', '2026-10-11', { rejectionReason: '역량 미달' }), 'INTERVIEW', '2026-10-12', { correction: true })
+  expect(planned.schedule?.active).toBe(true)
 })
