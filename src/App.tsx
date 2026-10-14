@@ -94,11 +94,12 @@ function FeedbackForm({ evaluation, criteria, isPending, error, onSubmit }: {
   onSubmit: (values: SubmitApplicantFeedbackRequest) => void
 }) {
   const draftKey = `recruitment-feedback-draft:${evaluation.id}`
-  const [draft] = useState(() => { try { return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null') as { reviewer?: ApplicantOwner; score?: string; comment?: string; correctionReason?: string; criteriaScores?: Record<string, string> } | null } catch { return null } })
+  const [draft] = useState(() => { try { return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null') as { reviewer?: ApplicantOwner; plannedReviewer?: ApplicantOwner; score?: string; comment?: string; correctionReason?: string; criteriaScores?: Record<string, string> } | null } catch { return null } })
   const [draftError, setDraftError] = useState(false)
   const [editing, setEditing] = useState(evaluation.status === 'PENDING')
   const [correctionReason, setCorrectionReason] = useState(draft?.correctionReason ?? '')
-  const [reviewer, setReviewer] = useState<ApplicantOwner>(draft?.reviewer ?? evaluation.reviewer)
+  // A draft written before the evaluation plan reassigned the reviewer must not bring the old reviewer back.
+  const [reviewer, setReviewer] = useState<ApplicantOwner>(draft?.reviewer && (draft.plannedReviewer ?? evaluation.reviewer) === evaluation.reviewer ? draft.reviewer : evaluation.reviewer)
   // A reviewer reassigned by the evaluation plan replaces the form's reviewer; score and comment drafts stay.
   const [plannedReviewer, setPlannedReviewer] = useState(evaluation.reviewer)
   if (plannedReviewer !== evaluation.reviewer) { setPlannedReviewer(evaluation.reviewer); setReviewer(evaluation.reviewer) }
@@ -107,7 +108,7 @@ function FeedbackForm({ evaluation, criteria, isPending, error, onSubmit }: {
   const [criteriaScores, setCriteriaScores] = useState<Record<string, string>>(() => draft?.criteriaScores ?? Object.fromEntries((evaluation.criteriaScores ?? []).map(({ criterion, score }) => [criterion, String(score)])))
 
   function persistDraft(values: { reviewer: ApplicantOwner; score: string; comment: string; correctionReason: string }, scores = criteriaScores) {
-    const next = { ...values, criteriaScores: scores }
+    const next = { ...values, criteriaScores: scores, plannedReviewer: evaluation.reviewer }
     try { sessionStorage.setItem(draftKey, JSON.stringify(next)); setDraftError(false) } catch { setDraftError(true) }
   }
   if (!editing) return <button type="button" disabled={isPending} onClick={() => setEditing(true)}>평가 정정</button>
@@ -259,6 +260,8 @@ function App() {
   // The archive shares the page state with applicants, so only the applicants list may clamp it.
   useLayoutEffect(() => { if (view !== 'archive' && !applicantsPending && !applicantsError && page !== pagination.page) setPage(pagination.page) }, [view, applicantsPending, applicantsError, page, pagination.page, setPage])
   const previousSelection = useRef(selectedId)
+  const latestSelectedId = useRef(selectedId)
+  latestSelectedId.current = selectedId
   useLayoutEffect(() => {
     if (previousSelection.current && !selectedId && !restoreTrigger.current) {
       restoreTrigger.current = { trigger: detailTrigger.current }
@@ -291,7 +294,8 @@ function App() {
   async function operateSelected(operation: ApplicantOperation, selectedActor: ApplicantOwner) {
     if (!selectedApplicant) return '지원자를 찾을 수 없습니다.'
     const problem = await saveOperation(selectedApplicant.id, operation, selectedActor)
-    if (!problem && operation.kind === 'delete') closeDetail()
+    // The response can arrive after another applicant was opened; only close the deleted one.
+    if (!problem && operation.kind === 'delete' && latestSelectedId.current === selectedApplicant.id) closeDetail()
     return problem
   }
   function navigateToPosition(positionId: string) { if (!canLeaveWorkspaceDraft()) return; navigate({ view: 'applicants', filters: { ...EMPTY_FILTERS, positionId }, page: 1, selectedId: null }) }

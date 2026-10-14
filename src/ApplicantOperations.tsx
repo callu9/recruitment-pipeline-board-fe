@@ -14,22 +14,33 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   const [draftError, setDraftError] = useState(false)
   const [saved, setSaved] = useState(false)
   const key = `recruitment-operation-draft:${id}:${title}`
+  // A restored select target (e.g. the position being edited) may arrive before its options load.
+  const unresolved = useRef<Record<string, string>>({})
+  useEffect(() => {
+    for (const [name, value] of Object.entries(unresolved.current)) {
+      const field = ref.current?.elements.namedItem(name)
+      if (field instanceof HTMLSelectElement && [...field.options].some((option) => option.value === value)) { field.value = value; delete unresolved.current[name] }
+    }
+  })
   useEffect(() => {
     try {
       const values = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, string>
       for (const [name, value] of Object.entries(values)) {
         const field = ref.current?.elements.namedItem(name)
         if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) field.value = value
+        if (field instanceof HTMLSelectElement && value && field.value !== value) unresolved.current[name] = value
       }
     } catch { /* A corrupt draft does not prevent editing the saved record. */ }
   }, [key])
-  return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={() => {
+  return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={(event) => {
+    if ('name' in event.target) delete unresolved.current[String(event.target.name)]
     setSaved(false)
     try { sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(new FormData(ref.current!)))); setDraftError(false) } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }} onSubmit={async (event) => {
     event.preventDefault()
     const formElement = event.currentTarget
     setError(''); setSaved(false)
+    if (Object.keys(unresolved.current).length) { setError('편집할 대상을 불러온 뒤 저장해 주세요.'); return }
     try {
       const problem = await save(build(new FormData(event.currentTarget)))
       if (problem) setError(problem)
