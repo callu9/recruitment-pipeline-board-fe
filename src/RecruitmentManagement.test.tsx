@@ -54,3 +54,21 @@ test('PR review final: after creating a position the form edits that position in
   const created = (client.getQueryData(positionsQueryKey) as typeof SEED_POSITIONS).find(({ title }) => title === '새 포지션')!
   await waitFor(() => expect(within(form).getByLabelText('편집할 포지션')).toHaveValue(created.id))
 })
+test('PR review R8: the created position becomes the edit target even if the form was remounted during the save', async () => {
+  setMockApiTestConfig({ delayMs: 200, failureRate: 0 })
+  const client = new QueryClient()
+  client.setQueryData(positionsQueryKey, SEED_POSITIONS)
+  const view = () => <QueryClientProvider client={client}><RecruitmentManagement positions={client.getQueryData(positionsQueryKey) ?? []} applicants={[]} actor="김하나" mode="positions" /></QueryClientProvider>
+  const first = render(view())
+  const form = screen.getByRole('form', { name: '포지션 개설·수정' })
+  fireEvent.change(within(form).getByLabelText('포지션명'), { target: { value: '왕복 포지션' } })
+  fireEvent.change(within(form).getByLabelText('부서'), { target: { value: '플랫폼' } })
+  fireEvent.submit(form)
+  first.unmount()
+  const second = render(view())
+  await waitFor(() => expect((client.getQueryData(positionsQueryKey) as typeof SEED_POSITIONS).some(({ title }) => title === '왕복 포지션')).toBe(true))
+  second.rerender(view())
+  const created = (client.getQueryData(positionsQueryKey) as typeof SEED_POSITIONS).find(({ title }) => title === '왕복 포지션')!
+  await waitFor(() => expect(within(screen.getByRole('form', { name: '포지션 개설·수정' })).getByLabelText('편집할 포지션')).toHaveValue(created.id))
+  sessionStorage.clear()
+})

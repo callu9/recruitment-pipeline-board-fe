@@ -50,7 +50,9 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
   if (operation.kind === 'contact') {
     requiredText(operation.channel, '연락 채널'); requiredText(operation.content, '연락 내용')
     if (!validDate(operation.date) || (operation.followUpDate && (!validDate(operation.followUpDate) || operation.followUpDate < operation.date)) || !['PLANNED', 'DONE'].includes(operation.status) || typeof operation.reply !== 'string') throw new Error('연락 날짜·상태·응답을 확인해 주세요.')
-    const contact = { ...operation, id: operation.id || `contact-${applicant.id}-${(applicant.contacts ?? []).length + 1}`, actor }
+    const { base: requestBase, ...fields } = operation
+    void requestBase // the baseline only validates this request; it is not part of the contact record
+    const contact = { ...fields, id: operation.id || `contact-${applicant.id}-${(applicant.contacts ?? []).length + 1}`, actor }
     if (operation.id && !applicant.contacts?.some(({ id }) => id === operation.id)) throw new Error('연락 기록을 찾을 수 없습니다.')
     const stored = applicant.contacts?.find(({ id }) => id === operation.id)
     if (stored && operation.base !== undefined && operation.base !== contactVersion(stored)) throw new Error('다른 화면에서 이 연락이 바뀌었습니다. 연락을 다시 선택해 주세요.')
@@ -100,7 +102,7 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
     // The contact owns the dates of tasks it created; editing them here would diverge from the contact record.
     if (contact && task.dueDate !== applicant.followUps?.find(({ id }) => id === task.id)?.dueDate) throw new Error('연락에서 만든 업무의 날짜는 연락 기록에서 바꿔 주세요.')
-    if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
+    if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, base: undefined, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
     return log({ ...applicant, contacts: task.done && contact ? applicant.contacts?.map((item) => item.id === contact.id ? { ...item, followUpDate: '' } : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
   }
   if (operation.kind === 'assignment') {

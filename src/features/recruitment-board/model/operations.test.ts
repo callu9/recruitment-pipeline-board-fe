@@ -398,3 +398,12 @@ test('PR review R7: a contact form opened before another form completed the cont
   const current = applicant.contacts!.at(-1)!
   expect(applyApplicantOperation(applicant, { kind: 'contact', id: contact.id, base: contactVersion(current), channel: '전화', content: '안내', date: '2026-10-10', status: 'DONE', reply: '회신', followUpDate: '' }, '김하나', '2026-10-11').contacts!.at(-1)).toMatchObject({ status: 'DONE', reply: '회신' })
 })
+test('PR review R8: the request baseline is not stored on the contact and a later task completion works', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  const contact = applicant.contacts!.at(-1)!
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', id: contact.id, base: contactVersion(contact), channel: '전화', content: '안내', date: '2026-10-12', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-08')
+  expect(applicant.contacts!.at(-1)).not.toHaveProperty('base')
+  const task = applicant.followUps!.find(({ id }) => id === contact.id)!
+  expect(applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-12').contacts!.at(-1)).toMatchObject({ status: 'DONE' })
+})

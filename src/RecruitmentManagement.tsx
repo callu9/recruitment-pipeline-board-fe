@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { APPLICANT_ROLES, type Applicant, type ApplicantIntake, type ApplicantOwner, type Position } from './features/recruitment-board/model/applicant.types'
 import { applicantsQueryKey } from './features/recruitment-board/api/useApplicantsQuery'
@@ -15,15 +15,15 @@ const text = (data: FormData, key: string) => String(data.get(key) ?? '')
 const saving = new Set<string>()
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
+// After creating a position the form switches to editing it, so a follow-up save cannot create a duplicate (kept outside for remounts).
+const createdPosition: { id?: string } = {}
 const setSaving = (endpoint: string, value: boolean) => { if (value) saving.add(endpoint); else saving.delete(endpoint); listeners.forEach((listener) => listener()) }
 export function RecruitmentManagement({ positions, applicants, actor, mode }: { positions: Position[]; applicants: Applicant[]; actor: ApplicantOwner; mode: 'intake' | 'positions' }) {
   const client = useQueryClient()
   const pending = useSyncExternalStore(subscribe, () => saving.has(mode === 'positions' ? 'positions' : 'applicants'))
-  // After creating a position the form switches to editing it, so a follow-up save cannot create a duplicate.
-  const created = useRef<string | undefined>(undefined)
   useEffect(() => {
     const select = document.querySelector<HTMLSelectElement>('form[aria-label="포지션 개설·수정"] select[name="id"]')
-    if (created.current && select && [...select.options].some(({ value }) => value === created.current)) { select.value = created.current; created.current = undefined }
+    if (createdPosition.id && select && [...select.options].some(({ value }) => value === createdPosition.id)) { select.value = createdPosition.id; createdPosition.id = undefined }
   })
   async function post(endpoint: 'applicants' | 'positions', body: unknown) {
     if (saving.has(endpoint)) return '저장 중입니다.'
@@ -37,7 +37,7 @@ export function RecruitmentManagement({ positions, applicants, actor, mode }: { 
       // Without a loaded list, caching only the saved position would hide the others and the retry state.
       else if (!client.getQueryData(positionsQueryKey)) void client.invalidateQueries({ queryKey: positionsQueryKey })
       else client.setQueryData<Position[]>(positionsQueryKey, (current = []) => current.some(({ id }) => id === result.id) ? current.map((item) => item.id === result.id ? result : item) : [...current, result])
-      if (endpoint === 'positions' && !(body as Position).id) created.current = result.id
+      if (endpoint === 'positions' && !(body as Position).id) createdPosition.id = result.id
       return null
     } catch (cause) { return cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해 주세요.' }
     finally { setSaving(endpoint, false) }
