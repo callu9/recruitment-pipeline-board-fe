@@ -1,6 +1,7 @@
 import {
   APPLICANT_OWNERS,
   type Applicant,
+  type ApplicantEvaluation,
   type ApplicantStage,
   type EvaluationType,
   type SubmitApplicantFeedbackRequest,
@@ -57,6 +58,14 @@ export function getStageTransitionBlockers(applicant: Applicant, target: Applica
   if (applicant.archivedAt || (applicant.lifecycle && applicant.lifecycle !== 'ACTIVE')) blockers.push('보관·보류·종료한 지원 건은 복원 또는 재개 후 진행하세요.')
   if (applicant.employment?.actualStartDate && target !== applicant.stage) blockers.push('실제 입사 후에는 전형 단계를 변경할 수 없습니다.')
   return blockers
+}
+
+// A round whose latest schedule was cancelled, postponed or a no-show stays closed when the stage returns to INTERVIEW.
+function isClosedInterviewRound(applicant: Applicant, evaluation: ApplicantEvaluation) {
+  if (evaluation.type !== 'INTERVIEW' || !applicant.schedule) return false
+  const round = evaluation.round ?? 1
+  const latest = (applicant.schedule.round ?? 1) === round ? applicant.schedule : applicant.schedule.history?.findLast((item) => (item.round ?? 1) === round)
+  return ['CANCELLED', 'POSTPONED', 'NO_SHOW'].includes(latest?.status ?? '')
 }
 
 export function retireRecruitmentWork(applicant: Applicant, at: string, notify = true): Applicant {
@@ -184,7 +193,7 @@ export function applyStageTransition(
     nextAction,
     rejectionReason: targetStage === 'REJECTED' ? options.rejectionReason?.trim() : undefined,
     rejectionMemo: targetStage === 'REJECTED' ? options.rejectionMemo?.trim() || undefined : undefined,
-    evaluations: evaluations?.map((evaluation) => ({ ...evaluation, active: evaluation.type === targetEvaluationType })),
+    evaluations: evaluations?.map((evaluation) => ({ ...evaluation, active: evaluation.type === targetEvaluationType && !isClosedInterviewRound(applicant, evaluation) })),
     schedule: applicant.schedule ? { ...applicant.schedule, active: targetStage === 'INTERVIEW' } : applicant.schedule,
     dueDate: undefined,
     offer: applicant.offer && (applicant.stage === 'REJECTED' || !['OFFER', 'HIRED'].includes(targetStage)) ? { ...applicant.offer, active: false } : applicant.offer,

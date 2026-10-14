@@ -328,3 +328,26 @@ test('G18 R8: rejects an actual start date before the application date', () => {
   const hired = { ...source(), appliedAt: '2026-10-10T09:00:00.000Z', stage: 'HIRED' as const, offer: { conditions: '연봉', proposedAt: '2026-10-10', responseDueDate: '2026-10-12', status: 'ACCEPTED' as const, reason: '', active: true } }
   expect(() => applyApplicantOperation(hired, { kind: 'employment', plannedStartDate: '2026-10-09', actualStartDate: '2026-10-09' }, '김하나', '2026-10-13', SEED_POSITIONS)).toThrow('입사일은 접수일 이후여야 합니다.')
 })
+test('PR review P1: follow-up IDs stay unique after a completed contact removes its task', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-08', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  applicant = applyApplicantOperation(applicant, { kind: 'task', label: '업무 A', dueDate: '2026-10-09', done: false }, '김하나', '2026-10-07')
+  const contactId = applicant.contacts!.at(-1)!.id
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', id: contactId, channel: '전화', content: '안내', date: '2026-10-08', status: 'DONE', reply: '확인', followUpDate: '' }, '김하나', '2026-10-08')
+  applicant = applyApplicantOperation(applicant, { kind: 'task', label: '업무 B', dueDate: '2026-10-10', done: false }, '김하나', '2026-10-08')
+  const ids = applicant.followUps!.map(({ id }) => id)
+  expect(new Set(ids).size).toBe(ids.length)
+  const a = applicant.followUps!.find(({ label }) => label === '업무 A')!
+  applicant = applyApplicantOperation(applicant, { kind: 'task', id: a.id, label: '업무 A', dueDate: '2026-10-09', done: true }, '김하나', '2026-10-09')
+  expect(applicant.followUps!.find(({ label }) => label === '업무 B')).toMatchObject({ dueDate: '2026-10-10', done: false })
+})
+test('PR review P2: stage correction keeps a cancelled interview round inactive', () => {
+  let applicant: Applicant = { ...source(), stage: 'INTERVIEW', evaluations: [], schedule: null }
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-10', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'CANCELLED', round: 1 } }, '김하나', '2026-10-07')
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-11', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'COMPLETED', round: 2 } }, '김하나', '2026-10-08')
+  const round2 = applicant.evaluations!.find(({ round }) => round === 2)!
+  applicant = submitApplicantEvaluation(applicant, round2.id, { reviewer: '김하나', score: 80, comment: '근거' }, '2026-10-11')
+  const offer = applyStageTransition(applicant, 'OFFER', '2026-10-12')
+  const corrected = applyStageTransition(offer, 'INTERVIEW', '2026-10-13', { correction: true })
+  expect(corrected.evaluations!.find(({ round, type }) => type === 'INTERVIEW' && round === 1)?.active).toBe(false)
+})

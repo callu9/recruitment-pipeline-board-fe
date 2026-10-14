@@ -24,6 +24,8 @@ export function RecruitmentManagement({ positions, applicants, actor, mode }: { 
       const result = await response.json()
       if (!response.ok) throw new Error(result.message ?? '저장 실패')
       if (endpoint === 'applicants') client.setQueryData<Applicant[]>(applicantsQueryKey, (current = []) => [...current, ...result])
+      // Without a loaded list, caching only the saved position would hide the others and the retry state.
+      else if (!client.getQueryData(positionsQueryKey)) void client.invalidateQueries({ queryKey: positionsQueryKey })
       else client.setQueryData<Position[]>(positionsQueryKey, (current = []) => current.some(({ id }) => id === result.id) ? current.map((item) => item.id === result.id ? result : item) : [...current, result])
       return null
     } catch (cause) { return cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해 주세요.' }

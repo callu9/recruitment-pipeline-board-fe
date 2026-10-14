@@ -86,7 +86,10 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (operation.id?.startsWith('assignment-')) throw new Error('과제는 과제 관리에서 기록해 주세요.')
     requiredText(operation.label, '후속 업무')
     if (!validDate(operation.dueDate) || typeof operation.done !== 'boolean') throw new Error('업무 기한·완료 상태를 확인해 주세요.')
-    const task = { id: operation.id || `task-${applicant.id}-${(applicant.followUps ?? []).length + 1}`, label: operation.label, dueDate: operation.dueDate, done: operation.done }
+    // Completed contacts remove their tasks, so the list length can repeat an ID; the timeline only grows.
+    let sequence = (applicant.timeline ?? []).length + 1
+    while (applicant.followUps?.some(({ id }) => id === `task-${applicant.id}-${sequence}`)) sequence += 1
+    const task = { id: operation.id || `task-${applicant.id}-${sequence}`, label: operation.label, dueDate: operation.dueDate, done: operation.done }
     if (operation.id && !applicant.followUps?.some(({ id }) => id === operation.id)) throw new Error('후속 업무를 찾을 수 없습니다.')
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
     if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
