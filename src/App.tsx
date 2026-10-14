@@ -9,7 +9,7 @@ import { RecruitmentInsights } from './RecruitmentInsights'
 import { RecruitmentManagement } from './RecruitmentManagement'
 import { ApplicantOperations } from './ApplicantOperations'
 import { useApplicantOperation } from './features/recruitment-board/api/useApplicantOperation'
-import { personKey, getTransitionIssues, type ApplicantOperation } from './features/recruitment-board/model/operations'
+import { personKey, getEvaluationCriteria, getTransitionIssues, withCurrentAssignmentChecks, type ApplicantOperation } from './features/recruitment-board/model/operations'
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import styles from './App.module.css'
@@ -86,31 +86,35 @@ function StageConfirmationDialog({ confirmation, onCancel, onConfirm }: { confir
   </dialog>
 }
 
-function FeedbackForm({ evaluation, isPending, error, onSubmit }: {
+function FeedbackForm({ evaluation, criteria, isPending, error, onSubmit }: {
   evaluation: ApplicantEvaluation
+  criteria: string[]
   isPending: boolean
   error?: string
   onSubmit: (values: SubmitApplicantFeedbackRequest) => void
 }) {
   const draftKey = `recruitment-feedback-draft:${evaluation.id}`
-  const [draft] = useState(() => { try { return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null') as { reviewer?: ApplicantOwner; score?: string; comment?: string; correctionReason?: string } | null } catch { return null } })
+  const [draft] = useState(() => { try { return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null') as { reviewer?: ApplicantOwner; score?: string; comment?: string; correctionReason?: string; criteriaScores?: Record<string, string> } | null } catch { return null } })
   const [draftError, setDraftError] = useState(false)
   const [editing, setEditing] = useState(evaluation.status === 'PENDING')
   const [correctionReason, setCorrectionReason] = useState(draft?.correctionReason ?? '')
   const [reviewer, setReviewer] = useState<ApplicantOwner>(draft?.reviewer ?? evaluation.reviewer)
   const [score, setScore] = useState(draft?.score ?? evaluation.score?.toString() ?? '')
   const [comment, setComment] = useState(draft?.comment ?? evaluation.comment ?? '')
+  const [criteriaScores, setCriteriaScores] = useState<Record<string, string>>(() => draft?.criteriaScores ?? Object.fromEntries((evaluation.criteriaScores ?? []).map(({ criterion, score }) => [criterion, String(score)])))
 
-  function persistDraft(next: { reviewer: ApplicantOwner; score: string; comment: string; correctionReason: string }) {
+  function persistDraft(values: { reviewer: ApplicantOwner; score: string; comment: string; correctionReason: string }, scores = criteriaScores) {
+    const next = { ...values, criteriaScores: scores }
     try { sessionStorage.setItem(draftKey, JSON.stringify(next)); setDraftError(false) } catch { setDraftError(true) }
   }
   if (!editing) return <button type="button" disabled={isPending} onClick={() => setEditing(true)}>평가 정정</button>
   return <form className={styles.feedbackForm} aria-label={`${stageLabelForEvaluation(evaluation.type)} 피드백`} data-draft-error={draftError || undefined} aria-busy={isPending} onSubmit={(event) => {
     event.preventDefault()
-    onSubmit({ reviewer, score: Number(score), comment, correctionReason: correctionReason.trim() || undefined })
+    onSubmit({ reviewer, score: Number(score), comment, correctionReason: correctionReason.trim() || undefined, criteriaScores: criteria.length ? criteria.map((criterion) => ({ criterion, score: Number(criteriaScores[criterion]) })) : undefined })
   }}>
     <label>평가자<NativeSelect value={reviewer} disabled={isPending} onChange={(event) => { setReviewer(event.target.value as ApplicantOwner); persistDraft({ reviewer: event.target.value as ApplicantOwner, score, comment, correctionReason }) }}>{APPLICANT_OWNERS.map((owner) => <NativeSelectOption key={owner}>{owner}</NativeSelectOption>)}</NativeSelect></label>
     <label>점수<Input type="number" min="0" max="100" required value={score} disabled={isPending} onChange={(event) => { setScore(event.target.value); persistDraft({ reviewer, score: event.target.value, comment, correctionReason }) }} /></label>
+    {criteria.length > 0 && <fieldset><legend>포지션 평가 기준별 점수 (1–5)</legend>{criteria.map((criterion) => <label key={criterion}>{criterion}<Input type="number" min="1" max="5" step="1" required value={criteriaScores[criterion] ?? ''} disabled={isPending} onChange={(event) => { const next = { ...criteriaScores, [criterion]: event.target.value }; setCriteriaScores(next); persistDraft({ reviewer, score, comment, correctionReason }, next) }} /></label>)}</fieldset>}
     <label>코멘트<textarea required value={comment} disabled={isPending} onChange={(event) => { setComment(event.target.value); persistDraft({ reviewer, score, comment: event.target.value, correctionReason }) }} /></label>
     {evaluation.status === 'SUBMITTED' && <label>평가 정정 사유<Input required value={correctionReason} onChange={(event) => { setCorrectionReason(event.target.value); persistDraft({ reviewer, score, comment, correctionReason: event.target.value }) }} /></label>}
     {draftError && <p role="alert">초안 저장 공간이 부족합니다. 창을 닫기 전에 평가를 저장해 주세요.</p>}
@@ -166,9 +170,10 @@ function ApplicantDetail({ initialTarget, applicant, positions, onClose, onMove,
       <StatusPill tone={evaluation.status === 'PENDING' ? 'amber' : 'green'}>{evaluation.status === 'PENDING' ? '작성 필요' : `${evaluation.score ?? '—'}점`}</StatusPill>
       <small>{evaluation.reviewer} · {evaluation.submittedAt ? `작성 ${fullDateLabel(evaluation.submittedAt)}` : `마감 ${dateLabel(evaluation.dueDate)}`}</small>
       {evaluation.comment && <p className={styles.evaluationComment}>{evaluation.comment}</p>}
+      {evaluation.criteriaScores?.length ? <p>기준별 점수: {evaluation.criteriaScores.map(({ criterion, score }) => `${criterion} ${score}/5`).join(' · ')}</p> : null}
       {evaluation.active === false && <small>이전 단계 기록 · 운영 큐에서 제외</small>}
-      <FeedbackForm key={`${evaluation.id}:${evaluation.submittedAt ?? ''}:${evaluation.score ?? ''}`} evaluation={evaluation} isPending={feedbackPending} error={feedbackError} onSubmit={(values) => onSubmitFeedback(evaluation.id, values)} />
-      {evaluation.revisions?.map((revision, index) => <p key={index}>이전 평가: {revision.score}점 · {revision.reviewer} · {revision.comment} · 정정 사유: {revision.reason}</p>)}
+      <FeedbackForm key={`${evaluation.id}:${evaluation.submittedAt ?? ''}:${evaluation.score ?? ''}`} evaluation={evaluation} criteria={getEvaluationCriteria(positions.find((position) => position.id === applicant.positionId))} isPending={feedbackPending} error={feedbackError} onSubmit={(values) => onSubmitFeedback(evaluation.id, values)} />
+      {evaluation.revisions?.map((revision, index) => <p key={index}>이전 평가: {revision.score}점{revision.criteriaScores?.length ? ` (${revision.criteriaScores.map(({ criterion, score }) => `${criterion} ${score}/5`).join(' · ')})` : ''} · {revision.reviewer} · {revision.comment} · 정정 사유: {revision.reason}</p>)}
     </div>)}</div></section>
     <section className={styles.detailSection} aria-labelledby={`${titleId}-schedule`}><h3 id={`${titleId}-schedule`}>{applicant.schedule && !isCurrentInterviewSchedule(applicant) ? '이전 면접 일정' : '일정'}</h3>{applicant.schedule ? <p>{fullDateLabel(applicant.schedule.date)} · {applicant.schedule.startTime}–{applicant.schedule.endTime}<br />{applicant.schedule.format === 'VIDEO' ? '화상 인터뷰' : '대면 인터뷰'} · {applicant.schedule.interviewer} · {SCHEDULE_STATUS_LABELS[applicant.schedule.status ?? 'PLANNED']}</p> : <p className={styles.muted}>등록된 일정이 없습니다.</p>}</section>
     <div className={styles.detailActions} role="group" aria-label="현재 채용 단계"><StatusPill tone={applicant.stage === 'HIRED' ? 'green' : applicant.stage === 'REJECTED' ? 'red' : 'blue'}>{stageLabel(applicant.stage)}</StatusPill><StageActionButtons secondary applicant={applicant} isPending={isPending} onMove={onMove} onReject={onReject} /></div>
@@ -200,7 +205,7 @@ function CalendarView({ applicants, onSelect, today }: { applicants: Applicant[]
 
 function PositionsView({ positions, applicants, onNavigate, today }: { positions: Position[]; applicants: Applicant[]; onNavigate: (positionId: string) => void; today: string }) {
   const summaries = getPositionSummaries(positions, applicants)
-  return <section className={styles.view} aria-labelledby="positions-heading"><div className={styles.viewHeader}><div><span className={styles.eyebrow}>HEADCOUNT</span><h2 id="positions-heading">포지션</h2><p>포지션별 채용 목표와 파이프라인 현황입니다.</p></div><StatusPill>{positions.length}개 포지션</StatusPill></div><div className={styles.tableWrap}><table className={styles.positionsTable}><caption className={styles.srOnly}>포지션 목록</caption><thead><tr><th>포지션</th><th>충원 현황</th><th>파이프라인</th><th>마감일</th><th>상태</th><th /></tr></thead><tbody>{summaries.map((position) => <tr key={position.id}><td><strong>{position.title}</strong><small>{position.department} · {position.role}</small></td><td><strong>{position.hiredCount} / {position.requiredCount}</strong><small>합격 / 목표</small></td><td>{position.activeCount}명</td><td className={position.deadline < today ? styles.overdue : ''}>{fullDateLabel(position.deadline)}</td><td><StatusPill tone={position.status === 'OPEN' ? 'green' : position.status === 'PAUSED' ? 'amber' : 'neutral'}>{position.status === 'OPEN' ? '채용 중' : position.status === 'PAUSED' ? '일시 중지' : '마감'}</StatusPill></td><td><Button variant="link" type="button" onClick={() => onNavigate(position.id)}>지원자 보기</Button></td></tr>)}</tbody></table></div></section>
+  return <section className={styles.view} aria-labelledby="positions-heading"><div className={styles.viewHeader}><div><span className={styles.eyebrow}>HEADCOUNT</span><h2 id="positions-heading">포지션</h2><p>포지션별 채용 목표와 파이프라인 현황입니다.</p></div><StatusPill>{positions.length}개 포지션</StatusPill></div><div className={styles.tableWrap}><table className={styles.positionsTable}><caption className={styles.srOnly}>포지션 목록</caption><thead><tr><th>포지션</th><th>충원 현황</th><th>파이프라인</th><th>마감일</th><th>상태</th><th /></tr></thead><tbody>{summaries.map((position) => <tr key={position.id}><td><strong>{position.title}</strong><small>{position.department} · {position.role}</small></td><td><strong>{position.hiredCount} / {position.requiredCount}</strong><small>합격 / 목표 · 실제 입사 {position.startedCount}</small></td><td>{position.activeCount}명</td><td className={position.deadline < today ? styles.overdue : ''}>{fullDateLabel(position.deadline)}</td><td><StatusPill tone={position.status === 'OPEN' ? 'green' : position.status === 'PAUSED' ? 'amber' : 'neutral'}>{position.status === 'OPEN' ? '채용 중' : position.status === 'PAUSED' ? '일시 중지' : '마감'}</StatusPill></td><td><Button variant="link" type="button" onClick={() => onNavigate(position.id)}>지원자 보기</Button></td></tr>)}</tbody></table></div></section>
 }
 
 function IntakeDialog({ open, children, onClose }: { open: boolean; children: ReactNode; onClose: () => void }) {
@@ -223,7 +228,8 @@ function IntakeDialog({ open, children, onClose }: { open: boolean; children: Re
 function canLeaveWorkspaceDraft() { return !document.querySelector('dialog [data-draft-error="true"]') || window.confirm('초안을 보관하지 못했습니다. 작성 내용을 버리고 이동할까요?') }
 
 function App() {
-  const { data: applicants = [], isPending: applicantsPending, isError: applicantsError, refetch: refetchApplicants } = useApplicantsQuery(); const { data: positions = [], isPending: positionsPending, isError: positionsError, refetch: refetchPositions } = usePositionsQuery(); const [intakeOpen, setIntakeOpen] = useState(false); const intakeTrigger = useRef<HTMLButtonElement | null>(null); const [detailRequest, setDetailRequest] = useState<{ target?: ApplicantWorkTarget; sequence: number }>({ sequence: 0 }); const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null); const cancelHistoryConfirmation = useCallback(() => { setConfirmation(null); setIntakeOpen(false) }, []); const { view, filters, sort, page, pageSize, selectedId, setView, setFilters, setSort, setPage, setPageSize, setSelectedId, navigate } = useWorkspaceNavigation(cancelHistoryConfirmation); const [feedbackSaveError, setFeedbackSaveError] = useState<{ applicantId: string; evaluationId: string; message: string } | null>(null); const [retryingApplicants, setRetryingApplicants] = useState(false); const today = getLocalDateString(); const detailTrigger = useRef<HTMLButtonElement | null>(null); const applicantsHeading = useRef<HTMLHeadingElement | null>(null); const restoreTrigger = useRef<{ trigger: HTMLButtonElement | null } | null>(null)
+  const { data: storedApplicants = [], isPending: applicantsPending, isError: applicantsError, refetch: refetchApplicants } = useApplicantsQuery(); const { data: positions = [], isPending: positionsPending, isError: positionsError, refetch: refetchPositions } = usePositionsQuery(); const [intakeOpen, setIntakeOpen] = useState(false); const intakeTrigger = useRef<HTMLButtonElement | null>(null); const [detailRequest, setDetailRequest] = useState<{ target?: ApplicantWorkTarget; sequence: number }>({ sequence: 0 }); const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null); const cancelHistoryConfirmation = useCallback(() => { setConfirmation(null); setIntakeOpen(false) }, []); const { view, filters, sort, page, pageSize, selectedId, setView, setFilters, setSort, setPage, setPageSize, setSelectedId, navigate } = useWorkspaceNavigation(cancelHistoryConfirmation); const [feedbackSaveError, setFeedbackSaveError] = useState<{ applicantId: string; evaluationId: string; message: string } | null>(null); const [retryingApplicants, setRetryingApplicants] = useState(false); const today = getLocalDateString(); const detailTrigger = useRef<HTMLButtonElement | null>(null); const applicantsHeading = useRef<HTMLHeadingElement | null>(null); const restoreTrigger = useRef<{ trigger: HTMLButtonElement | null } | null>(null)
+  const applicants = useMemo(() => storedApplicants.map((applicant) => withCurrentAssignmentChecks(applicant, positions)), [storedApplicants, positions])
   const [actor, setActor] = useState<ApplicantOwner>('김하나')
   const { save: saveOperation, pendingIds: operationPendingIds } = useApplicantOperation()
   useEffect(() => {

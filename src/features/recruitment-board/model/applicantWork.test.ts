@@ -20,3 +20,11 @@ test('keeps incomplete terminal followup executable and inactive work in support
 test('keeps a withdrawn notification actionable before offering support state changes', () => {
   expect(getApplicantWork({ ...base, lifecycle: 'WITHDRAWN', followUps: [{ id: 'notification', label: '종료 통보', dueDate: '2026-10-01', done: false, active: true }] }, '2026-10-08').target).toBe('후속 업무 관리')
 })
+test('G17 R4: routes a due assignment check to the assignment form', () => {
+  const work = getApplicantWork({ ...base!, followUps: [{ id: `assignment-${base!.id}-${base!.positionId}`, label: '과제 제출 확인 · 과제 A', dueDate: '2026-10-07', done: false }] }, '2026-10-07')
+  expect(work.target).toBe('과제 관리')
+})
+test('G17 R6: an on-hold applicant with a pending assignment is routed to the status form', () => {
+  const work = getApplicantWork({ ...base!, lifecycle: 'ON_HOLD', followUps: [{ id: `assignment-${base!.id}-${base!.positionId}`, label: '과제 제출 확인 · 과제 A', dueDate: '2026-10-07', done: false }] }, '2026-10-07')
+  expect(work.target).toBe('지원 상태 관리')
+})

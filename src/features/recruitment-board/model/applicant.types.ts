@@ -36,6 +36,11 @@ export interface InterviewSchedule {
   history?: InterviewSchedule[]
 }
 
+export interface CriterionScore {
+  criterion: string
+  score: number
+}
+
 export interface ApplicantEvaluation {
   id: string
   type: EvaluationType
@@ -48,7 +53,8 @@ export interface ApplicantEvaluation {
   active?: boolean
   resumeOnReactivation?: boolean
   round?: number
-  revisions?: Array<{ reviewer: ApplicantOwner; score?: number; comment?: string; submittedAt?: string; reason?: string }>
+  criteriaScores?: CriterionScore[]
+  revisions?: Array<{ reviewer: ApplicantOwner; score?: number; comment?: string; submittedAt?: string; reason?: string; criteriaScores?: CriterionScore[] }>
 }
 
 export interface ApplicantNote {
@@ -69,6 +75,7 @@ export interface ApplicantTimelineEvent {
   rejectionMemo?: string
   actor?: ApplicantOwner
   reason?: string
+  lifecycle?: NonNullable<Applicant['lifecycle']>
 }
 
 export interface Position {
@@ -139,6 +146,7 @@ export interface SubmitApplicantFeedbackRequest {
   comment: string
   correctionReason?: string
   actor?: ApplicantOwner
+  criteriaScores?: CriterionScore[]
 }
 
 export interface ApiErrorBody {

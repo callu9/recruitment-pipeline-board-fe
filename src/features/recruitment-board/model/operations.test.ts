@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { createSeedApplicants, SEED_POSITIONS } from '../../../mocks/seedApplicants'
-import { applyApplicantOperation, getTransitionIssues } from './operations'
+import { applyApplicantOperation, getAssignmentStatus, withCurrentAssignmentChecks, getCriteriaScoreIssue, getEvaluationCriteria, getTransitionIssues } from './operations'
 import { applyStageTransition, getCurrentStageEvaluation, submitApplicantEvaluation } from './stages'
 import { getCalendarEvents, getWorkDueDates, getMissingEvaluations, getTodayActionableApplicants } from './workspaceSelectors'
 import type { Applicant } from './applicant.types'
@@ -215,4 +215,116 @@ test('allows explicit reallocation of legacy inactive current evaluation without
   const updated = applyApplicantOperation(legacy, { kind: 'evaluation-plan', evaluationId: legacy.evaluations![0].id, reviewer: '박민지', dueDate: '2026-10-09', reassess: false, reason: '기존 종료 기록 재배정' }, '김하나', '2026-10-08')
   expect(getCurrentStageEvaluation(updated)).toMatchObject({ active: true, reviewer: '박민지' })
   expect(getMissingEvaluations([updated])).toEqual([updated])
+})
+
+test('G17: tracks assignment submission and warns before interview until it is confirmed', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '로그인 화면 구현' } : position)
+  const applicant = { ...source(), stage: 'DOCUMENT_REVIEW' as const }
+  expect(getTransitionIssues(applicant, 'INTERVIEW', positions).warnings).toContain('과제 제출 확인이 완료되지 않았습니다.')
+  const sent = applyApplicantOperation(applicant, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-07', positions)
+  expect(sent.followUps?.find(({ id }) => id === `assignment-${applicant.id}-${applicant.positionId}`)).toMatchObject({ dueDate: '2026-10-12', done: false, label: '과제 제출 확인 · 로그인 화면 구현' })
+  const submitted = applyApplicantOperation(sent, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-11', positions)
+  expect(submitted.followUps?.filter(({ id }) => id.startsWith('assignment-'))).toHaveLength(1)
+  expect(getTransitionIssues(submitted, 'INTERVIEW', positions).warnings).not.toContain('과제 제출 확인이 완료되지 않았습니다.')
+  expect(() => applyApplicantOperation(applicant, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-07', SEED_POSITIONS)).toThrow('과제가 없는 포지션입니다.')
+})
+test('G17: parses position criteria and requires one 1–5 score per criterion', () => {
+  const criteria = getEvaluationCriteria({ ...SEED_POSITIONS[0]!, evaluationCriteria: ' 문제 해결\n\n협업\n문제 해결 ' })
+  expect(criteria).toEqual(['문제 해결', '협업'])
+  expect(getCriteriaScoreIssue([], undefined)).toBeNull()
+  expect(getCriteriaScoreIssue(criteria, [{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 5 }])).toBeNull()
+  expect(getCriteriaScoreIssue(criteria, [{ criterion: '문제 해결', score: 4 }])).not.toBeNull()
+  expect(getCriteriaScoreIssue(criteria, [{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 6 }])).not.toBeNull()
+  expect(getCriteriaScoreIssue(criteria, [{ criterion: '문제 해결', score: 4 }, { criterion: '문제 해결', score: 4 }])).not.toBeNull()
+  expect(getCriteriaScoreIssue([], [{ criterion: '협업', score: 3 }])).not.toBeNull()
+})
+test('G17: keeps criterion scores on submit and in the correction history', () => {
+  const applicant = source()
+  const evaluation = getCurrentStageEvaluation(applicant)!
+  const first = submitApplicantEvaluation(applicant, evaluation.id, { reviewer: '김하나', score: 80, comment: '근거', criteriaScores: [{ criterion: '협업', score: 4 }] }, '2026-10-07')
+  const corrected = submitApplicantEvaluation(first, evaluation.id, { reviewer: '김하나', score: 90, comment: '정정', correctionReason: '오기', criteriaScores: [{ criterion: '협업', score: 5 }] }, '2026-10-08')
+  const saved = corrected.evaluations!.find(({ id }) => id === evaluation.id)!
+  expect(saved.criteriaScores).toEqual([{ criterion: '협업', score: 5 }])
+  expect(saved.revisions?.at(-1)?.criteriaScores).toEqual([{ criterion: '협업', score: 4 }])
+})
+test('G17: retires a pending assignment check when the application ends', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '로그인 화면 구현' } : position)
+  const sent = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-07', positions)
+  const withdrawn = applyApplicantOperation(sent, { kind: 'lifecycle', status: 'WITHDRAWN', reason: '지원 철회' }, '김하나', '2026-10-08', positions)
+  expect(withdrawn.followUps?.find(({ id }) => id.startsWith('assignment-'))?.active).toBe(false)
+})
+test('G17 R1: an assignment completed for another position or assignment text does not count', () => {
+  const withAssignment = (id: string, assignment: string) => SEED_POSITIONS.map((position) => position.id === id ? { ...position, assignment, status: 'OPEN' as const } : position)
+  const other = SEED_POSITIONS.find(({ id }) => id !== source().positionId)!
+  const positions = withAssignment(source().positionId!, '로그인 화면 구현').map((position) => position.id === other.id ? { ...position, assignment: '데이터 분석 과제', status: 'OPEN' as const } : position)
+  const applicant = { ...source(), stage: 'DOCUMENT_REVIEW' as const }
+  const done = applyApplicantOperation(applicant, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-07', positions)
+  const moved = applyApplicantOperation(done, { kind: 'transfer', positionId: other.id, reason: '직무 변경' }, '김하나', '2026-10-08', positions)
+  expect(getTransitionIssues(moved, 'INTERVIEW', positions).warnings).toContain('과제 제출 확인이 완료되지 않았습니다.')
+  const changedText = positions.map((position) => position.id === source().positionId ? { ...position, assignment: '새 과제' } : position)
+  expect(getTransitionIssues(done, 'INTERVIEW', changedText).warnings).toContain('과제 제출 확인이 완료되지 않았습니다.')
+})
+test('G17 R1: rejects assignment updates for ended applications', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '로그인 화면 구현' } : position)
+  const withdrawn = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'lifecycle', status: 'WITHDRAWN', reason: '지원 철회' }, '김하나', '2026-10-08', positions)
+  expect(() => applyApplicantOperation(withdrawn, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-09', positions)).toThrow('전형을 복원·재개한 후 과제를 기록해 주세요.')
+})
+test('G17 R2: ordinary stage moves keep assignment work and ending keeps a completed confirmation', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '로그인 화면 구현' } : position)
+  const sent = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-07', positions)
+  expect(applyStageTransition(sent, 'INTERVIEW', '2026-10-08').followUps?.find(({ id }) => id.startsWith('assignment-'))?.active).not.toBe(false)
+  const done = applyApplicantOperation(sent, { kind: 'assignment', assignment: '로그인 화면 구현', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-08', positions)
+  const resumed = applyApplicantOperation(applyApplicantOperation(done, { kind: 'lifecycle', status: 'WITHDRAWN', reason: '철회' }, '김하나', '2026-10-09', positions), { kind: 'lifecycle', status: 'ACTIVE', reason: '재개' }, '김하나', '2026-10-10', positions)
+  expect(getAssignmentStatus(resumed, positions)?.task?.done).toBe(true)
+})
+test('G17 R3: keeps assignment work when the transfer form saves the same position', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 A', status: 'OPEN' as const } : position)
+  const sent = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '과제 A', dueDate: '2026-10-12', submitted: false }, '김하나', '2026-10-07', positions)
+  const same = applyApplicantOperation(sent, { kind: 'transfer', positionId: sent.positionId!, reason: '사유만 기록' }, '김하나', '2026-10-08', positions)
+  expect(getAssignmentStatus(same, positions)?.task).toMatchObject({ done: false })
+})
+test('G17 R3: keeps the earlier assignment record when the assignment text changes', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 A' } : position)
+  const done = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '과제 A', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-07', positions)
+  const changed = positions.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 B' } : position)
+  const next = applyApplicantOperation(done, { kind: 'assignment', assignment: '과제 B', dueDate: '2026-10-20', submitted: false }, '김하나', '2026-10-08', changed)
+  expect(next.followUps?.find(({ label }) => label === '과제 제출 확인 · 과제 A')).toMatchObject({ done: true, active: false })
+  expect(getAssignmentStatus(next, changed)?.task).toMatchObject({ label: '과제 제출 확인 · 과제 B', done: false })
+  expect(next.timeline?.at(-1)?.label).toContain('과제 B')
+})
+test('G17 R4: assignment checks are edited only through the assignment form', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 A' } : position)
+  const sent = applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '과제 A', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-07', positions)
+  expect(() => applyApplicantOperation(sent, { kind: 'task', id: getAssignmentStatus(sent, positions)!.id, label: '과제 제출 확인 · 과제 A', dueDate: '2026-10-13', done: false }, '김하나', '2026-10-08', positions)).toThrow('과제는 과제 관리에서 기록해 주세요.')
+})
+test('G17 R5: a cleared or changed assignment hides only its pending check at read time and does not block archive', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 A' } : position)
+  const pending = { id: `assignment-${source().id}-${source().positionId}`, label: '과제 제출 확인 · 과제 A', dueDate: '2026-10-12', done: false }
+  const applicant = { ...source(), followUps: [pending, { ...pending, id: 'other-task' }] }
+  expect(withCurrentAssignmentChecks(applicant, positions)).toBe(applicant)
+  expect(withCurrentAssignmentChecks(applicant, [])).toBe(applicant)
+  const cleared = positions.map((position) => position.id === source().positionId ? { ...position, assignment: '' } : position)
+  expect(withCurrentAssignmentChecks(applicant, cleared).followUps).toEqual([{ ...pending, active: false }, { ...pending, id: 'other-task' }])
+  const rejected = applyStageTransition({ ...applicant, followUps: [pending] }, 'REJECTED', '2026-10-08', { rejectionReason: '역량 미달' })
+  const notified = { ...rejected, followUps: rejected.followUps!.map((task) => task.id === pending.id ? { ...task, active: undefined } : { ...task, done: true }) }
+  expect(() => applyApplicantOperation(notified, { kind: 'archive', archived: true, talentPool: false, reconnectDate: '', reason: '종료' }, '김하나', '2026-10-09', cleared)).not.toThrow()
+})
+test('G17 R5: final pass retires a pending assignment check and keeps a completed one', () => {
+  const pending = { id: `assignment-${source().id}-${source().positionId}`, label: '과제 제출 확인 · 과제 A', dueDate: '2026-10-12', done: false }
+  const hired = applyStageTransition({ ...source(), stage: 'OFFER' as const, followUps: [pending, { ...pending, id: `${pending.id}-history-1`, done: true }] }, 'HIRED', '2026-10-09')
+  expect(hired.followUps?.slice(0, 2).map(({ active }) => active)).toEqual([false, undefined])
+})
+test('G17 R6: rejects an assignment confirmation made against different assignment text', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, assignment: '과제 B' } : position)
+  expect(() => applyApplicantOperation({ ...source(), stage: 'DOCUMENT_REVIEW' as const }, { kind: 'assignment', assignment: '과제 A', dueDate: '2026-10-12', submitted: true }, '김하나', '2026-10-07', positions)).toThrow('포지션 과제가 변경되었습니다.')
+})
+test('G18 R7: blocks moving an application with an actual start to another position', () => {
+  const other = SEED_POSITIONS.find(({ id }) => id !== source().positionId)!
+  const positions = SEED_POSITIONS.map((position) => position.id === other.id ? { ...position, status: 'OPEN' as const } : position)
+  const started = { ...source(), stage: 'HIRED' as const, employment: { plannedStartDate: '2026-10-01', actualStartDate: '2026-10-01', active: true } }
+  expect(() => applyApplicantOperation(started, { kind: 'transfer', positionId: other.id, reason: '재배정' }, '김하나', '2026-10-08', positions)).toThrow('실제 입사 후에는 포지션 배정을 변경할 수 없습니다.')
+})
+test('G18 R8: rejects an actual start date before the application date', () => {
+  const hired = { ...source(), appliedAt: '2026-10-10T09:00:00.000Z', stage: 'HIRED' as const, offer: { conditions: '연봉', proposedAt: '2026-10-10', responseDueDate: '2026-10-12', status: 'ACCEPTED' as const, reason: '', active: true } }
+  expect(() => applyApplicantOperation(hired, { kind: 'employment', plannedStartDate: '2026-10-09', actualStartDate: '2026-10-09' }, '김하나', '2026-10-13', SEED_POSITIONS)).toThrow('입사일은 접수일 이후여야 합니다.')
 })

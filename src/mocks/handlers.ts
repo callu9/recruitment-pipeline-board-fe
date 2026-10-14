@@ -1,4 +1,4 @@
-import { getTransitionIssues } from '../features/recruitment-board/model/operations'
+import { getCriteriaScoreIssue, getEvaluationCriteria, getTransitionIssues } from '../features/recruitment-board/model/operations'
 import { http, HttpResponse } from 'msw'
 import { canTransitionTo, getLocalDateString, STAGES } from '../features/recruitment-board/model/stages'
 import { APPLICANT_OWNERS, type ApiErrorBody, type ApplicantOwner, type MoveApplicantStageRequest, type SubmitApplicantFeedbackRequest } from '../features/recruitment-board/model/applicant.types'
@@ -134,6 +134,8 @@ export const handlers = [
     const evaluation = applicant.evaluations?.find(({ id }) => id === params.evaluationId)
     if (!evaluation) return error(404, 'NOT_FOUND', '평가를 찾을 수 없습니다.')
     if (evaluation.status === 'SUBMITTED' && !body.correctionReason?.trim()) return error(409, 'INVALID_EVALUATION', '제출 평가 정정에는 사유가 필요합니다.')
+    const criteriaIssue = getCriteriaScoreIssue(getEvaluationCriteria(loadPositions().find(({ id }) => id === applicant.positionId)), body.criteriaScores)
+    if (criteriaIssue) return error(400, 'INVALID_BODY', criteriaIssue)
     if (shouldMockApiFail()) return error(503, 'MOCK_FAILURE', '피드백을 저장하지 못했습니다.')
 
     try { return HttpResponse.json(updateApplicantEvaluation(applicant.id, evaluation.id, body)) } catch { return error(503, 'MOCK_FAILURE', '평가를 저장하지 못했습니다. 다시 시도해 주세요.') }

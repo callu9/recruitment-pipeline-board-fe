@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { loadApplicants, saveApplicants, STORAGE_KEY } from './mockDb'
+import { loadApplicants, loadPositions, POSITIONS_STORAGE_KEY, saveApplicants, STORAGE_KEY } from './mockDb'
 import {
   DEFAULT_FAILURE_RATE,
   MAX_DELAY_MS,
@@ -374,5 +374,25 @@ describe('mock applicants API', () => {
         expect.objectContaining({ id: 'applicant-002', stage: 'REJECTED' }),
       ]),
     )
+  })
+})
+
+describe('G17 structured evaluation API', () => {
+  test('requires every position criterion score and persists them', async () => {
+    setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+    const applicant = loadApplicants()[0]!
+    localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(loadPositions().map((position) => position.id === applicant.positionId ? { ...position, evaluationCriteria: '문제 해결\n협업' } : position)))
+    const evaluation = applicant.evaluations!.find(({ type }) => type === 'SCREEN')!
+    const url = `${applicantsUrl}/${applicant.id}/evaluations/${evaluation.id}`
+    const send = (criteriaScores?: unknown) => fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewer: '김하나', score: 80, comment: '근거', criteriaScores }) })
+    const before = localStorage.getItem(STORAGE_KEY)
+    for (const invalid of [undefined, [{ criterion: '문제 해결', score: 4 }], 'bad']) {
+      const response = await send(invalid)
+      expect(response.status).toBe(400)
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    }
+    const response = await send([{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 5 }])
+    expect(response.status).toBe(200)
+    expect(loadApplicants()[0]?.evaluations?.find(({ id }) => id === evaluation.id)?.criteriaScores).toEqual([{ criterion: '문제 해결', score: 4 }, { criterion: '협업', score: 5 }])
   })
 })

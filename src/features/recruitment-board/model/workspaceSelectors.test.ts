@@ -125,3 +125,13 @@ test('formats deadline urgency by calendar days across DST and year boundaries',
   expect(workspace.formatWorkspaceDueDate('2026-10-08', false, '2026-10-10')).toBe('2026.10.08')
   expect(workspace.formatWorkspaceDueDate(undefined, true, '2026-10-08')).toBe('미정')
 })
+
+test('G18: counts actual starts separately from company final passes per position', () => {
+  const [first, second] = createSeedApplicants(2, '2026-10-07')
+  const position = SEED_POSITIONS.find(({ id }) => id === first!.positionId)!
+  const summaries = getPositionSummaries([position], [
+    { ...first!, stage: 'HIRED', employment: { plannedStartDate: '2026-10-20', actualStartDate: '2026-10-20', active: true } },
+    { ...second!, positionId: position.id, stage: 'HIRED' },
+  ])
+  expect(summaries[0]).toMatchObject({ hiredCount: 2, startedCount: 1 })
+})

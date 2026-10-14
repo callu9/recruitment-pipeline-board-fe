@@ -72,7 +72,7 @@ export function retireRecruitmentWork(applicant: Applicant, at: string, notify =
     evaluations: applicant.evaluations?.map((evaluation) => ({ ...evaluation, resumeOnReactivation: evaluation.active !== false || evaluation.resumeOnReactivation === true, active: false })),
     offer: offer ? { ...offer, active: false } : offer,
     employment: applicant.employment ? { ...applicant.employment, active: false } : applicant.employment,
-    followUps: [...(applicant.followUps ?? []).map((task) => /^(result-|handoff-|lifecycle-result-)/.test(task.id) ? { ...task, active: false } : task),
+    followUps: [...(applicant.followUps ?? []).map((task) => /^(result-|handoff-|lifecycle-result-)/.test(task.id) || (task.id.startsWith('assignment-') && !task.done) ? { ...task, active: false } : task),
       ...(notify ? [{ id: `lifecycle-result-${applicant.id}-${(applicant.timeline ?? []).length + 1}`, label: '종료 확인 통보', dueDate: getLocalDateString(at), done: false }] : [])],
   }
 }
@@ -103,11 +103,12 @@ export function submitApplicantEvaluation(
     evaluations: applicant.evaluations.map((evaluation) => evaluation.id === evaluationId
       ? {
           ...evaluation,
-          revisions: evaluation.status === 'SUBMITTED' ? [...(evaluation.revisions ?? []), { reviewer: evaluation.reviewer, score: evaluation.score, comment: evaluation.comment, submittedAt: evaluation.submittedAt, reason: values.correctionReason }] : evaluation.revisions,
+          revisions: evaluation.status === 'SUBMITTED' ? [...(evaluation.revisions ?? []), { reviewer: evaluation.reviewer, score: evaluation.score, comment: evaluation.comment, submittedAt: evaluation.submittedAt, reason: values.correctionReason, criteriaScores: evaluation.criteriaScores }] : evaluation.revisions,
           status: 'SUBMITTED',
           reviewer: values.reviewer,
           score: values.score,
           comment: values.comment.trim(),
+          criteriaScores: values.criteriaScores?.map(({ criterion, score }) => ({ criterion, score })),
           submittedAt,
         }
       : evaluation),
@@ -188,7 +189,7 @@ export function applyStageTransition(
     dueDate: undefined,
     offer: applicant.offer && (applicant.stage === 'REJECTED' || !['OFFER', 'HIRED'].includes(targetStage)) ? { ...applicant.offer, active: false } : applicant.offer,
     employment: applicant.employment && targetStage !== 'HIRED' ? { ...applicant.employment, active: false } : applicant.employment,
-    followUps: [...(applicant.followUps ?? []).map((task) => /^(result-|handoff-|lifecycle-result-)/.test(task.id) ? { ...task, active: false } : task),
+    followUps: [...(applicant.followUps ?? []).map((task) => /^(result-|handoff-|lifecycle-result-)/.test(task.id) || (targetStage === 'HIRED' && task.id.startsWith('assignment-') && !task.done) ? { ...task, active: false } : task),
       ...(targetStage === 'HIRED' ? [{ id: `result-${applicant.id}-${timeline.length}`, label: '결과 통보', dueDate: transitionDate, done: false }] : []),
       ...(targetStage === 'HIRED' ? [{ id: `handoff-${applicant.id}-${timeline.length}`, label: '입사 인계', dueDate: transitionDate, done: false }] : []),
     ],

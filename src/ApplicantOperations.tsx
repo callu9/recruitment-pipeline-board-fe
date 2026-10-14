@@ -5,7 +5,7 @@ import { EVALUATION_TYPE_LABELS, EVALUATION_STATUS_LABELS } from './features/rec
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { APPLICANT_OWNERS, SCHEDULE_STATUS_LABELS, LIFECYCLE_LABELS, OFFER_STATUS_LABELS, type Applicant, type ApplicantOwner, type Position } from './features/recruitment-board/model/applicant.types'
-import type { ApplicantOperation } from './features/recruitment-board/model/operations'
+import { getAssignmentStatus, type ApplicantOperation } from './features/recruitment-board/model/operations'
 import styles from './App.module.css'
 
 export function OperationForm<T>({ id, title, pending, build, save, children, clearAfterSave = [] }: { id: string; title: string; pending: boolean; build: (data: FormData) => T; save: (operation: T) => Promise<string | null>; children: ReactNode; clearAfterSave?: string[] }) {
@@ -47,7 +47,9 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
 const text = (data: FormData, key: string) => String(data.get(key) ?? '')
 
 export function ApplicantOperations({ applicant, actor, pending, save, positions, pane = 'work' }: { pane?: 'work' | 'support'; positions: Position[]; applicant: Applicant; actor: ApplicantOwner; pending: boolean; save: (operation: ApplicantOperation, actor: ApplicantOwner) => Promise<string | null> }) {
-  const form = (title: string, build: (data: FormData) => ApplicantOperation, children: ReactNode) => <div hidden={( ['포지션 배정 변경', '지원 정보 편집', '지원 상태 관리', '보관·복원', '지원 건 삭제'].includes(title) ? 'support' : 'work') !== pane}><OperationForm clearAfterSave={title === '담당 업무 편집' ? ['note'] : undefined} id={applicant.id} title={title} pending={pending} build={build} save={(operation) => save(operation, actor)}>{children}</OperationForm></div>
+  // scope separates remounts and drafts when the same form edits a different record (e.g. another position's assignment).
+  const form = (title: string, build: (data: FormData) => ApplicantOperation, children: ReactNode, scope?: string) => <div key={scope} hidden={( ['포지션 배정 변경', '지원 정보 편집', '지원 상태 관리', '보관·복원', '지원 건 삭제'].includes(title) ? 'support' : 'work') !== pane}><OperationForm clearAfterSave={title === '담당 업무 편집' ? ['note'] : undefined} id={scope ? `${applicant.id}:${scope}` : applicant.id} title={title} pending={pending} build={build} save={(operation) => save(operation, actor)}>{children}</OperationForm></div>
+  const { assignment, task: assignmentTask, id: assignmentId, label: assignmentLabel } = getAssignmentStatus(applicant, positions) ?? {}
   return <>
     {form('포지션 배정 변경', (data) => ({ kind: 'transfer', positionId: text(data, 'positionId'), reason: text(data, 'reason') }), <><label>배정 포지션<NativeSelect name="positionId" required defaultValue={applicant.positionId}><NativeSelectOption value="">선택</NativeSelectOption>{positions.filter(({ status }) => status === 'OPEN').map((position) => <NativeSelectOption key={position.id} value={position.id}>{position.title}</NativeSelectOption>)}</NativeSelect></label><label>배정 변경 사유<Input name="reason" required /></label></>)}
     {form('지원 정보 편집', (data) => ({ kind: 'profile', name: text(data, 'name'), email: text(data, 'email'), phone: text(data, 'phone'), resumeUrl: text(data, 'resumeUrl'), portfolioUrl: text(data, 'portfolioUrl'), source: text(data, 'source') }), <>
@@ -92,11 +94,14 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
     </>)}
     {applicant.employment && <p>{applicant.employment.active === false ? '종료된 입사 계획' : '입사 예정'} {formatWorkspaceDate(applicant.employment.plannedStartDate)} · 실제 {applicant.employment.actualStartDate ? formatWorkspaceDate(applicant.employment.actualStartDate) : '미입사'}</p>}
     {applicant.employment?.history?.map((record, index) => <p key={index}>이전 입사 계획 {formatWorkspaceDate(record.plannedStartDate)} · 실제 {record.actualStartDate ? formatWorkspaceDate(record.actualStartDate) : '미입사'}</p>)}
+    {assignment && form('과제 관리', (data) => ({ kind: 'assignment', assignment: text(data, 'assignment'), dueDate: text(data, 'dueDate'), submitted: text(data, 'submitted') === 'true' }), <>
+      <p>과제: {assignment} · {assignmentTask?.done ? '제출 확인' : '제출 미확인'}</p><label>과제 제출 기한<Input name="dueDate" type="date" required defaultValue={assignmentTask?.dueDate} /></label><label>제출 여부<NativeSelect name="submitted" defaultValue={String(assignmentTask?.done ?? false)}><NativeSelectOption value="false">안내·제출 대기</NativeSelectOption><NativeSelectOption value="true">제출 확인</NativeSelectOption></NativeSelect></label><input type="hidden" name="assignment" value={assignment} />
+    </>, `${assignmentId}:${assignmentLabel}`)}
     {form('후속 업무 관리', (data) => ({ kind: 'task', id: text(data, 'id') || undefined, label: text(data, 'label'), dueDate: text(data, 'dueDate'), done: text(data, 'done') === 'true' }), <>
       <label>편집할 업무<NativeSelect name="id" onChange={(event) => {
         const task = applicant.followUps?.find(({ id }) => id === event.target.value)
         for (const name of ['label', 'dueDate', 'done'] as const) (event.target.form!.elements.namedItem(name) as HTMLInputElement).value = String(task?.[name] ?? (name === 'done' ? 'false' : ''))
-      }}><NativeSelectOption value="">새 업무</NativeSelectOption>{applicant.followUps?.map((task) => <NativeSelectOption key={task.id} value={task.id}>{task.label} · {task.done ? '완료' : '대기'}</NativeSelectOption>)}</NativeSelect></label><label>후속 업무<Input name="label" required /></label><label>후속 업무 기한<Input name="dueDate" type="date" required /></label><label>완료 상태<NativeSelect name="done"><NativeSelectOption value="false">대기</NativeSelectOption><NativeSelectOption value="true">완료</NativeSelectOption></NativeSelect></label>
+      }}><NativeSelectOption value="">새 업무</NativeSelectOption>{applicant.followUps?.filter(({ id }) => !id.startsWith('assignment-')).map((task) => <NativeSelectOption key={task.id} value={task.id}>{task.label} · {task.done ? '완료' : '대기'}</NativeSelectOption>)}</NativeSelect></label><label>후속 업무<Input name="label" required /></label><label>후속 업무 기한<Input name="dueDate" type="date" required /></label><label>완료 상태<NativeSelect name="done"><NativeSelectOption value="false">대기</NativeSelectOption><NativeSelectOption value="true">완료</NativeSelectOption></NativeSelect></label>
     </>)}
     {applicant.followUps?.map((task) => <p key={task.id}>{task.label} · {formatWorkspaceDate(task.dueDate)} · {task.active === false ? '종료된 업무 이력' : task.done ? '완료' : '대기'}</p>)}
     {form('보관·복원', (data) => ({ kind: 'archive', archived: text(data, 'archived') === 'true', talentPool: text(data, 'talentPool') === 'true', reconnectDate: text(data, 'reconnectDate'), reason: text(data, 'reason') }), <>

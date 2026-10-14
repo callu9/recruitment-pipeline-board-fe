@@ -217,6 +217,7 @@ export function getPositionSummaries(positions: Position[], applicants: Applican
       ...position,
       applicantCount: matching.length,
       hiredCount: matching.filter((applicant) => applicant.stage === 'HIRED').length,
+      startedCount: matching.filter((applicant) => applicant.employment?.active !== false && applicant.employment?.actualStartDate).length,
       activeCount: matching.filter((applicant) => isRecruiting(applicant)).length,
     }
   })

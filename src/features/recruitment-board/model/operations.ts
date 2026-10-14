@@ -1,4 +1,4 @@
-import { APPLICANT_OWNERS, SCHEDULE_STATUS_LABELS, LIFECYCLE_LABELS, OFFER_STATUS_LABELS, type Applicant, type ApplicantOwner, type ApplicantStage, type ApplicantIntake, type InterviewSchedule, type Position } from './applicant.types'
+import { APPLICANT_OWNERS, SCHEDULE_STATUS_LABELS, LIFECYCLE_LABELS, OFFER_STATUS_LABELS, type Applicant, type ApplicantOwner, type ApplicantStage, type ApplicantIntake, type InterviewSchedule, type Position, type ApplicantTimelineEvent } from './applicant.types'
 import { canRecordEmployment, getStageTransitionBlockers, retireRecruitmentWork, getCurrentStageEvaluation, getLocalDateString, STAGE_EVALUATION_TYPES, isTerminalStage } from './stages'
 
 export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule }
@@ -13,6 +13,7 @@ export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule
   | { kind: 'delete'; confirmation: string; reason: string }
   | { kind: 'transfer'; positionId: string; reason: string }
   | { kind: 'work'; owner: ApplicantOwner; dueDate: string; nextAction: string; note: string }
+  | { kind: 'assignment'; assignment: string; dueDate: string; submitted: boolean }
 
 export function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
@@ -22,7 +23,7 @@ export function requiredText(value: unknown, label: string): asserts value is st
 }
 export function applyApplicantOperation(applicant: Applicant, operation: ApplicantOperation, actor: ApplicantOwner, at: string, positions: Position[] = []): Applicant {
   if (!operation || typeof operation !== 'object' || !APPLICANT_OWNERS.includes(actor)) throw new Error('올바른 작업과 처리자를 선택해 주세요.')
-  const log = (updated: Applicant, label: string): Applicant => ({ ...updated, timeline: [...(applicant.timeline ?? []), { id: `operation-${applicant.id}-${(applicant.timeline ?? []).length + 1}`, at, actor, label }] })
+  const log = (updated: Applicant, label: string, detail?: Pick<ApplicantTimelineEvent, 'lifecycle' | 'reason'>): Applicant => ({ ...updated, timeline: [...(applicant.timeline ?? []), { id: `operation-${applicant.id}-${(applicant.timeline ?? []).length + 1}`, at, actor, label, ...detail }] })
   if (operation.kind === 'profile') {
     validateProfile(operation)
     return log({ ...applicant, personId: personKey(applicant), name: operation.name.trim(), email: operation.email.trim(), phone: operation.phone.trim(), resumeUrl: operation.resumeUrl.trim(), portfolioUrl: operation.portfolioUrl.trim(), source: operation.source.trim() }, '지원 정보·자료 수정')
@@ -60,13 +61,14 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const { history: oldHistory, ...previous } = applicant.offer ?? { conditions: operation.conditions, proposedAt: operation.proposedAt, responseDueDate: operation.responseDueDate, status: operation.status, reason: operation.reason, history: [] }
     const declined = operation.status === 'DECLINED'
     const updated: Applicant = { ...applicant, offer: { conditions: operation.conditions.trim(), proposedAt: operation.proposedAt, responseDueDate: operation.responseDueDate, status: operation.status, reason: operation.reason, active: true, history: applicant.offer ? [...(oldHistory ?? []), previous] : [] }, lifecycle: declined ? 'OFFER_DECLINED' : applicant.lifecycle, lifecycleReason: declined ? operation.reason : applicant.lifecycleReason }
-    return log(declined ? retireRecruitmentWork(updated, at) : updated, `오퍼 ${OFFER_STATUS_LABELS[operation.status]} · ${operation.conditions} · ${operation.reason}`)
+    return log(declined ? retireRecruitmentWork(updated, at) : updated, `오퍼 ${OFFER_STATUS_LABELS[operation.status]} · ${operation.conditions} · ${operation.reason}`, declined ? { lifecycle: 'OFFER_DECLINED', reason: operation.reason } : undefined)
   }
   if (operation.kind === 'employment') {
     if (!canRecordEmployment(applicant)) throw new Error('활성 전형의 회사 최종 합격과 새 오퍼 수락을 먼저 기록해 주세요.')
     if (applicant.employment?.actualStartDate && operation.actualStartDate !== applicant.employment.actualStartDate) throw new Error('확인한 실제 입사일은 삭제·변경할 수 없습니다.')
     if (!validDate(operation.plannedStartDate) || (operation.actualStartDate && !validDate(operation.actualStartDate))) throw new Error('입사 날짜를 확인해 주세요.')
     if (operation.actualStartDate && operation.actualStartDate > getLocalDateString(at)) throw new Error('실제 입사일은 미래일 수 없습니다.')
+    if ([operation.plannedStartDate, operation.actualStartDate].some((date) => date && date < getLocalDateString(applicant.appliedAt))) throw new Error('입사일은 접수일 이후여야 합니다.')
     const { history, ...previous } = applicant.employment ?? { plannedStartDate: '', actualStartDate: '' }
     return log({ ...applicant, employment: { plannedStartDate: operation.plannedStartDate, actualStartDate: operation.actualStartDate, active: true, history: applicant.employment ? [...(history ?? []), previous] : [] } }, `입사 예정 ${operation.plannedStartDate} · 실제 ${operation.actualStartDate || '미입사'}`)
   }
@@ -78,9 +80,10 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     const updated = { ...previous, lifecycle: operation.status, lifecycleReason: operation.reason, followUps: (previous.followUps ?? []).map((task) => task.id.startsWith('lifecycle-result-') ? { ...task, active: false } : task) }
     if (operation.status === 'ACTIVE') updated.evaluations = previous.evaluations?.map(({ resumeOnReactivation, ...evaluation }) =>
       evaluation.type === STAGE_EVALUATION_TYPES[previous.stage] && (evaluation.active !== false || resumeOnReactivation === true) ? { ...evaluation, active: true } : evaluation)
-    return log(['WITHDRAWN', 'OFFER_DECLINED'].includes(operation.status) ? retireRecruitmentWork(updated, at) : updated, `지원 상태 ${LIFECYCLE_LABELS[operation.status]} · ${operation.reason}`)
+    return log(['WITHDRAWN', 'OFFER_DECLINED'].includes(operation.status) ? retireRecruitmentWork(updated, at) : updated, `지원 상태 ${LIFECYCLE_LABELS[operation.status]} · ${operation.reason}`, { lifecycle: operation.status, reason: operation.reason })
   }
   if (operation.kind === 'task') {
+    if (operation.id?.startsWith('assignment-')) throw new Error('과제는 과제 관리에서 기록해 주세요.')
     requiredText(operation.label, '후속 업무')
     if (!validDate(operation.dueDate) || typeof operation.done !== 'boolean') throw new Error('업무 기한·완료 상태를 확인해 주세요.')
     const task = { id: operation.id || `task-${applicant.id}-${(applicant.followUps ?? []).length + 1}`, label: operation.label, dueDate: operation.dueDate, done: operation.done }
@@ -89,11 +92,23 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
     return log({ ...applicant, contacts: task.done && contact ? applicant.contacts?.map((item) => item.id === contact.id ? { ...item, followUpDate: '' } : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
   }
+  if (operation.kind === 'assignment') {
+    const status = getAssignmentStatus(applicant, positions)
+    if (!status) throw new Error('과제가 없는 포지션입니다.')
+    if (applicant.archivedAt || isTerminalStage(applicant.stage) || (applicant.lifecycle && applicant.lifecycle !== 'ACTIVE')) throw new Error('전형을 복원·재개한 후 과제를 기록해 주세요.')
+    if (operation.assignment?.trim() !== status.assignment) throw new Error('포지션 과제가 변경되었습니다. 새 과제를 확인한 뒤 다시 저장해 주세요.')
+    if (!validDate(operation.dueDate) || typeof operation.submitted !== 'boolean') throw new Error('과제 기한·제출 여부를 확인해 주세요.')
+    // Reuses follow-up tasks so Today and overdue queues pick the assignment up without a new selector.
+    const task = { id: status.id, label: status.label, dueDate: operation.dueDate, done: operation.submitted }
+    // A record for earlier assignment text stays as inactive history instead of being overwritten.
+    const followUps = (applicant.followUps ?? []).map((item) => item.id === task.id && item.label !== task.label ? { ...item, id: `${item.id}-history-${(applicant.timeline ?? []).length}`, active: false } : item).filter(({ id }) => id !== task.id)
+    return log({ ...applicant, followUps: [...followUps, task] }, `과제 ${operation.submitted ? '제출 확인' : '안내·기한 등록'} · ${status.assignment} · 기한 ${operation.dueDate}`)
+  }
   if (operation.kind === 'archive') {
     requiredText(operation.reason, '보관·복원 사유')
     if (typeof operation.archived !== 'boolean' || typeof operation.talentPool !== 'boolean' || (operation.reconnectDate && !validDate(operation.reconnectDate))) throw new Error('보관 입력을 확인해 주세요.')
     if (operation.archived && !isTerminalStage(applicant.stage) && !['WITHDRAWN', 'OFFER_DECLINED'].includes(applicant.lifecycle ?? 'ACTIVE')) throw new Error('전형을 종료한 후 보관해 주세요.')
-    if (operation.archived && applicant.followUps?.some((task) => task.active !== false && !task.done)) throw new Error('남은 통보·인계 업무를 완료한 후 보관해 주세요.')
+    if (operation.archived && withCurrentAssignmentChecks(applicant, positions).followUps?.some((task) => task.active !== false && !task.done)) throw new Error('남은 통보·인계 업무를 완료한 후 보관해 주세요.')
     return log({ ...applicant, archivedAt: operation.archived ? at : undefined, talentPool: operation.talentPool, reconnectDate: operation.reconnectDate }, `${operation.archived ? '보관' : '복원'} · ${operation.reason}`)
   }
   if (operation.kind === 'delete') {
@@ -103,9 +118,11 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
   }
   if (operation.kind === 'transfer') {
     requiredText(operation.reason, '배정 변경 사유')
+    // Actual-start statistics are attributed to the position at hire time.
+    if (applicant.employment?.actualStartDate && operation.positionId !== applicant.positionId) throw new Error('실제 입사 후에는 포지션 배정을 변경할 수 없습니다.')
     const position = positions.find((item) => item.id === operation.positionId)
     if (!position || position.status !== 'OPEN') throw new Error('채용 중인 포지션을 선택해 주세요.')
-    return log({ ...applicant, positionId: position.id, role: position.role }, `포지션 변경 ${applicant.positionId ?? '미지정'} → ${position.id} · ${operation.reason}`)
+    return log({ ...applicant, positionId: position.id, role: position.role, followUps: applicant.followUps?.map((task) => position.id !== applicant.positionId && task.id.startsWith(`assignment-${applicant.id}-`) && !task.done ? { ...task, active: false } : task) }, `포지션 변경 ${applicant.positionId ?? '미지정'} → ${position.id} · ${operation.reason}`)
   }
   if (operation.kind !== 'schedule') throw new Error('지원하지 않는 작업입니다.')
   const schedule = operation.schedule
@@ -129,6 +146,32 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
   }
 }
 
+// The task is tied to the position and assignment text, so a transfer or a changed assignment needs a new confirmation.
+export function getAssignmentStatus(applicant: Applicant, positions: Position[]) {
+  const assignment = positions.find(({ id }) => id === applicant.positionId)?.assignment?.trim()
+  if (!assignment) return undefined
+  const id = `assignment-${applicant.id}-${applicant.positionId}`
+  const label = `과제 제출 확인 · ${assignment}`
+  return { assignment, id, label, task: applicant.followUps?.find((task) => task.id === id && task.label === label && task.active !== false) }
+}
+// Derived at read time: a pending check for a cleared or changed assignment is not current work. Stored data is untouched.
+export function withCurrentAssignmentChecks(applicant: Applicant, positions: Position[]): Applicant {
+  const position = positions.find(({ id }) => id === applicant.positionId)
+  if (!position || !applicant.followUps) return applicant
+  const current = getAssignmentStatus(applicant, [position])?.label
+  const stale = (task: NonNullable<Applicant['followUps']>[number]) => task.id === `assignment-${applicant.id}-${position.id}` && !task.done && task.active !== false && task.label !== current
+  return applicant.followUps.some(stale) ? { ...applicant, followUps: applicant.followUps.map((task) => stale(task) ? { ...task, active: false } : task) } : applicant
+}
+export function getEvaluationCriteria(position?: Position) {
+  return [...new Set((position?.evaluationCriteria ?? '').split('\n').map((line) => line.trim()).filter(Boolean))]
+}
+export function getCriteriaScoreIssue(criteria: string[], scores: unknown): string | null {
+  if (scores === undefined) return criteria.length ? '포지션 평가 기준별 점수를 입력해 주세요.' : null
+  if (!Array.isArray(scores) || scores.length !== criteria.length || new Set(scores.map((item) => item?.criterion)).size !== criteria.length
+    || !scores.every((item) => criteria.includes(item?.criterion) && Number.isInteger(item?.score) && item.score >= 1 && item.score <= 5)) return '포지션 평가 기준마다 1–5점을 한 번씩 입력해 주세요.'
+  return null
+}
+
 export function getTransitionIssues(applicant: Applicant, target: ApplicantStage, positions: Position[]) {
   const warnings: string[] = []
   const blockers = getStageTransitionBlockers(applicant, target)
@@ -136,6 +179,8 @@ export function getTransitionIssues(applicant: Applicant, target: ApplicantStage
   if (applicant.stage === 'INTERVIEW' && target === 'OFFER' && getCurrentStageEvaluation(applicant)?.status === 'SUBMITTED' && new Set((applicant.evaluations ?? []).filter((evaluation) => evaluation.type === 'INTERVIEW' && evaluation.status === 'SUBMITTED').map((evaluation) => evaluation.round ?? 1)).size < (position?.requiredInterviewRounds ?? 1)) warnings.push('필요한 면접 회차의 평가가 완료되지 않았습니다.')
   if (target !== 'REJECTED' && (getCurrentStageEvaluation(applicant)?.status !== 'SUBMITTED' || applicant.evaluations?.some((evaluation) => evaluation.type === getCurrentStageEvaluation(applicant)?.type && evaluation.active !== false && evaluation.status === 'PENDING'))) warnings.push('현재 전형 평가가 완료되지 않았습니다.')
   if (applicant.stage === 'INTERVIEW' && target === 'OFFER' && applicant.schedule?.status !== 'COMPLETED') warnings.push('면접 실시 기록이 없습니다.')
+  const assignment = getAssignmentStatus(applicant, positions)
+  if (applicant.stage === 'DOCUMENT_REVIEW' && target === 'INTERVIEW' && assignment && !assignment.task?.done) warnings.push('과제 제출 확인이 완료되지 않았습니다.')
   return { warnings, blockers }
 }
 
