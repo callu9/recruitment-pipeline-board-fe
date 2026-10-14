@@ -121,11 +121,19 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
       for (const element of Array.from(ref.current?.elements ?? [])) if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.readOnly = locked.includes(element.name)
     }
   })
+  // Changed fields plus the selected record; hidden baselines (conflict checks) travel with any edit so a restored draft is still checked against what it was based on.
+  function draftValues() {
+    const editing = Array.from(dirty.current).some((name) => name !== selection?.field)
+    return Object.fromEntries(Array.from(new FormData(ref.current!)).filter(([name]) => {
+      const field = ref.current!.elements.namedItem(name)
+      return dirty.current.has(name) || name === selection?.field || (editing && field instanceof HTMLInputElement && field.type === 'hidden')
+    }))
+  }
   function persistDraft() {
     try {
       // A draft holds only what the user changed (plus the selected record), so untouched fields keep following the stored data.
       // While the record is still loading the fields are not filled yet, so the draft is the restored draft plus what was typed since.
-      const values = waiting.current && selection ? { ...waiting.current.draft, [selection.field]: waiting.current.id } : Object.fromEntries(Array.from(new FormData(ref.current!)).filter(([name]) => dirty.current.has(name) || name === selection?.field))
+      const values = waiting.current && selection ? { ...waiting.current.draft, [selection.field]: waiting.current.id } : draftValues()
       sessionStorage.setItem(key, JSON.stringify(values)); setDraftError(false)
     } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }

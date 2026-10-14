@@ -133,3 +133,19 @@ test('Form sync R7: a selected but unedited contact keeps its conflict baseline 
   expect((contacts.elements.namedItem('base') as HTMLInputElement).value).toBe(contactVersion({ ...contact, status: 'DONE' }))
   expect(within(contacts).getByLabelText('실행 여부')).toHaveValue('DONE')
 })
+test('Form sync R8: a restored contact draft keeps the baseline it was edited against', () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  const contact = { id: `contact-${applicant.id}-1`, channel: '전화', content: '안내', date: '2026-10-10', status: 'DONE' as const, reply: '확인', followUpDate: '2026-10-15', actor: '김하나' as const }
+  const props = { actor: '김하나' as const, pending: false, save: async () => null, positions: SEED_POSITIONS }
+  const client = new QueryClient()
+  const first = render(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={{ ...applicant, contacts: [contact] }} /></QueryClientProvider>)
+  let form = screen.getByRole('form', { name: '연락 기록' }) as HTMLFormElement
+  fireEvent.change(within(form).getByLabelText('편집할 연락'), { target: { value: contact.id } })
+  fireEvent.change(within(form).getByLabelText('재연락 기한'), { target: { value: '2026-10-18' } })
+  first.unmount()
+  render(<QueryClientProvider client={client}><ApplicantOperations {...props} applicant={{ ...applicant, contacts: [{ ...contact, followUpDate: '' }] }} /></QueryClientProvider>)
+  form = screen.getByRole('form', { name: '연락 기록' }) as HTMLFormElement
+  expect(within(form).getByLabelText('재연락 기한')).toHaveValue('2026-10-18')
+  expect((form.elements.namedItem('base') as HTMLInputElement).value).toBe(contactVersion(contact))
+  sessionStorage.clear()
+})

@@ -136,3 +136,13 @@ test.each(cancelledHistoryPaths)('keeps past $scheduleStatus work inactive when 
   expect(getMissingEvaluations([resumed])).toEqual([])
   expect((await move('OFFER')).status).toBe(200)
 })
+test('Form sync R8: a profile edit cannot take another person’s email', async () => {
+  const [first, second] = createSeedApplicants(2, '2026-10-07')
+  saveApplicants([first!, second!])
+  const before = localStorage.getItem(STORAGE_KEY)
+  const response = await patch({ kind: 'profile', name: second!.name, email: ` ${first!.email.toUpperCase()} `, phone: second!.phone, resumeUrl: '', portfolioUrl: '', source: '직접 접수' }, second!.id)
+  expect(response.status).toBeGreaterThanOrEqual(400)
+  expect(await response.json()).toMatchObject({ message: expect.stringContaining(first!.id) })
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+  expect((await patch({ kind: 'profile', name: second!.name, email: 'second-new@example.com', phone: second!.phone, resumeUrl: '', portfolioUrl: '', source: '직접 접수' }, second!.id)).status).toBe(200)
+})

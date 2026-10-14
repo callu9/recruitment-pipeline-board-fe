@@ -213,6 +213,11 @@ export function validateProfile(value: { name: string; email: string; phone: str
   }
 }
 export function personKey(applicant: Pick<Applicant, 'email' | 'personId'>) { return applicant.personId ?? `email:${applicant.email.trim().toLowerCase()}` }
+/** Another person's application using this email; intake refuses that state, so profile edits must too. */
+export function findEmailConflict(applicant: Applicant, email: string, applicants: Applicant[]) {
+  const normalized = email.trim().toLowerCase()
+  return applicants.find((item) => item.id !== applicant.id && item.email.trim().toLowerCase() === normalized && personKey(item) !== personKey(applicant))
+}
 
 export function createApplication(input: ApplicantIntake, applicants: Applicant[], positions: Position[], actor: ApplicantOwner, id: string, at: string): Applicant {
   validateProfile(input)
