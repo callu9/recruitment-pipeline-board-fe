@@ -8,10 +8,12 @@ export interface ApplicantWork { label: string; target: ApplicantWorkTarget; rea
 /** A view recommendation only: mutations still enforce existing domain policies. */
 export function getApplicantWork(applicant: Applicant, today = getLocalDateString()): ApplicantWork {
   if (applicant.talentPool && applicant.reconnectDate && applicant.reconnectDate <= today) return { label: '재접촉 기록', target: '연락 기록', dueDate: applicant.reconnectDate, reason: '인재풀의 재접촉 기한을 확인해 주세요.' }
-  if (applicant.archivedAt) return { label: '보관 기록 확인', target: '보관·복원', reason: '보관된 지원 건입니다. 지원 정보에서 복원 여부를 확인하세요.' }
   // An on-hold or ended application cannot record assignments, so its assignment check is not the next action.
   const followUp = applicant.followUps?.filter((task) => isPendingFollowUp(applicant, task) && !(applicant.lifecycle && applicant.lifecycle !== 'ACTIVE' && task.id.startsWith('assignment-'))).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
   const followUpTarget = followUp?.id.startsWith('assignment-') ? '과제 관리' : '후속 업무 관리'
+  // An archived talent-pool record's due re-contact task comes before the archive review.
+  if (applicant.archivedAt && followUp && followUp.dueDate <= today) return { label: '후속 업무 처리', target: followUpTarget, dueDate: followUp.dueDate, reason: followUp.label }
+  if (applicant.archivedAt) return { label: '보관 기록 확인', target: '보관·복원', reason: '보관된 지원 건입니다. 지원 정보에서 복원 여부를 확인하세요.' }
   if (followUp && followUp.dueDate <= today) return { label: '후속 업무 처리', target: followUpTarget, dueDate: followUp.dueDate, reason: followUp.label }
   if (followUp && applicant.lifecycle && applicant.lifecycle !== 'ACTIVE') return { label: '후속 업무 처리', target: followUpTarget, dueDate: followUp.dueDate, reason: followUp.label }
   if (applicant.lifecycle && applicant.lifecycle !== 'ACTIVE') return { label: '지원 상태 확인', target: '지원 상태 관리', reason: '현재 지원 상태와 재개 조건을 확인해 주세요.' }

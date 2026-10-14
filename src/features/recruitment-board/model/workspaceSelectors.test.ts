@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { getApplicantWork } from './applicantWork'
 import { createSeedApplicants, SEED_POSITIONS } from '../../../mocks/seedApplicants'
 import {
   filterWorkspaceApplicants,
@@ -134,4 +135,13 @@ test('G18: counts actual starts separately from company final passes per positio
     { ...second!, positionId: position.id, stage: 'HIRED' },
   ])
   expect(summaries[0]).toMatchObject({ hiredCount: 2, startedCount: 1 })
+})
+
+test('Form sync R10: an archived talent-pool re-contact task stays in the work queues and calendar', () => {
+  const base = createSeedApplicants(1, '2026-10-07')[0]!
+  const contact = { id: `contact-${base.id}-1`, channel: '전화', content: '재접촉', date: '2026-10-15', status: 'DONE' as const, reply: '다음 달 가능', followUpDate: '2026-10-18', actor: '김하나' as const }
+  const applicant = { ...base, stage: 'REJECTED' as const, archivedAt: '2026-10-01T00:00:00.000Z', talentPool: true, reconnectDate: '2026-10-15', contacts: [contact], followUps: [{ id: contact.id, label: '재연락: 재접촉', dueDate: '2026-10-18', done: false }] }
+  expect(getCalendarEvents([applicant]).some(({ id, date }) => id === contact.id && date === '2026-10-18')).toBe(true)
+  expect(getApplicantWork({ ...applicant, reconnectDate: '' }, '2026-10-18')).toMatchObject({ target: '후속 업무 관리', dueDate: '2026-10-18' })
+  expect(getCalendarEvents([{ ...applicant, followUps: [{ ...applicant.followUps[0]!, done: true }] }]).some(({ id }) => id === contact.id)).toBe(false)
 })

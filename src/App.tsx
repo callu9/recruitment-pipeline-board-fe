@@ -135,6 +135,8 @@ function ApplicantDetail({ initialTarget, applicant, positions, onClose, onMove,
   const titleId = `detail-title-${applicant.id}`
   const positionTitle = positions.find((position) => position.id === applicant.positionId)?.title
   const work = getApplicantWork(applicant)
+  // The evaluation shortcut opens the earliest active pending evaluation, whatever the overall next action is.
+  const currentEvaluationId = applicant.evaluations?.filter((evaluation) => isActiveEvaluation(applicant, evaluation) && evaluation.status === 'PENDING').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]?.id
   const [pane, setPane] = useState<'work' | 'support' | 'history'>(initialTarget && isSupportWork(initialTarget) ? 'support' : 'work')
   onCloseRef.current = onClose
   function focusWork(target: ApplicantWorkTarget) {
@@ -170,7 +172,7 @@ function ApplicantDetail({ initialTarget, applicant, positions, onClose, onMove,
     }}>{label}</Button>)}</div>
     <div role="tabpanel" id={`${titleId}-pane-work`} aria-labelledby={`${titleId}-tab-work`} hidden={pane !== 'work'}>
       <section className={styles.workSummary}><h3>{work.label}</h3><p>{work.reason}</p><p>{formatWorkspaceDueDate(work.dueDate, Boolean(work.dueDate))}</p><Button type="button" disabled={isPending} onClick={openWork}>{work.label}</Button></section>
-    <section data-work-target="evaluation" className={styles.detailSection} aria-labelledby={`${titleId}-evaluation`}><h3 id={`${titleId}-evaluation`}>평가</h3><div className={styles.evaluationList}>{(applicant.evaluations ?? []).map((evaluation) => <div data-current-work={isActiveEvaluation(applicant, evaluation) && evaluation.status === "PENDING" && evaluation.dueDate === work.dueDate || undefined} className={styles.evaluation} key={evaluation.id}>
+    <section data-work-target="evaluation" className={styles.detailSection} aria-labelledby={`${titleId}-evaluation`}><h3 id={`${titleId}-evaluation`}>평가</h3><div className={styles.evaluationList}>{(applicant.evaluations ?? []).map((evaluation) => <div data-current-work={evaluation.id === currentEvaluationId || undefined} className={styles.evaluation} key={evaluation.id}>
       <span>{stageLabelForEvaluation(evaluation.type, evaluation.round)}</span>
       <StatusPill tone={evaluation.status === 'PENDING' ? 'amber' : 'green'}>{evaluation.status === 'PENDING' ? '작성 필요' : `${evaluation.score ?? '—'}점`}</StatusPill>
       <small>{evaluation.reviewer} · {evaluation.submittedAt ? `작성 ${fullDateLabel(evaluation.submittedAt)}` : `마감 ${dateLabel(evaluation.dueDate)}`}</small>

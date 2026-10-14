@@ -121,3 +121,16 @@ test('Form sync R2: input typed while the edit target is still loading survives 
   expect(within(form).getByLabelText('부서')).toHaveValue('새 부서')
   expect(within(form).getByLabelText('포지션명')).toHaveValue('초안 제목')
 })
+test('Form sync R10: an intake draft keeps its position until the position list arrives', async () => {
+  const key = 'recruitment-operation-draft:intake:지원 접수'
+  sessionStorage.setItem(key, JSON.stringify({ name: '초안 지원자', positionId: SEED_POSITIONS[0]!.id }))
+  const client = new QueryClient()
+  const view = (positions: typeof SEED_POSITIONS) => <QueryClientProvider client={client}><RecruitmentManagement positions={positions} applicants={[]} actor="김하나" mode="intake" /></QueryClientProvider>
+  const { rerender } = render(view([]))
+  const form = screen.getByRole('form', { name: '지원 접수' })
+  fireEvent.change(within(form).getByLabelText('지원자 이메일'), { target: { value: 'draft@example.com' } })
+  expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ positionId: SEED_POSITIONS[0]!.id, email: 'draft@example.com' })
+  rerender(view(SEED_POSITIONS))
+  await waitFor(() => expect(within(form).getByLabelText('접수 포지션')).toHaveValue(SEED_POSITIONS[0]!.id))
+  expect(within(form).getByLabelText('지원자 이름')).toHaveValue('초안 지원자')
+})

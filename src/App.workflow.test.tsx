@@ -606,3 +606,14 @@ test('Form sync R9: each Today queue opens the work of that queue', async () => 
   expect(within(section('오늘의 인터뷰')).getByRole('button', { name: /^상세 보기:/ })).toHaveTextContent('면접 일정 확인')
   expect(within(section('평가 작성 필요')).getByRole('button', { name: /^상세 보기:/ })).toHaveTextContent('평가 작성')
 })
+test('Form sync R10: the Today evaluation shortcut focuses the pending evaluation even when another task sets the overall due date', async () => {
+  const today = getLocalDateString()
+  const base = createSeedApplicants(1, '2026-10-07')[0]!
+  const screen0 = base.evaluations!.find(({ type }) => type === 'SCREEN')!
+  saveApplicants([{ ...base, evaluations: [{ ...screen0, status: 'PENDING', dueDate: today, active: true }], followUps: [{ id: 'task-1', label: '서류 보완 요청', dueDate: '2026-10-01', done: false }] }])
+  await start()
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^오늘 할 일/ }))
+  const section = screen.getByRole('heading', { name: '평가 작성 필요' }).closest('section')!
+  fireEvent.click(within(section).getByRole('button', { name: /^상세 보기:/ }))
+  await waitFor(() => expect(document.activeElement?.closest('[data-work-target="evaluation"]')).not.toBeNull())
+})

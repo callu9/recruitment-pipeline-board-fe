@@ -41,6 +41,8 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   selectionRef.current = selection
   const selected = useRef('')
   const synced = useRef('')
+  // A restored select value whose option has not loaded yet (e.g. intake position before the position list arrives).
+  const pendingSelects = useRef<Record<string, string>>({})
   // Fields the user changed since the last sync or save; every other field follows the stored record (single-record forms).
   const dirty = useRef(new Set<string>())
   const storedRef = useRef(stored)
@@ -87,6 +89,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     for (const [name, value] of Object.entries(values)) {
       const field = ref.current?.elements.namedItem(name)
       if (isField(field)) { field.value = value; dirty.current.add(name) }
+      if (field instanceof HTMLSelectElement && value && field.value !== value) pendingSelects.current[name] = value
     }
   }, [key, fill])
   const storedKey = JSON.stringify(stored ?? null)
@@ -105,6 +108,10 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
       if (result.id !== undefined && selectionRef.current) waiting.current = { id: result.id, draft: {} }
     }
     if (waiting.current && fill(waiting.current.id, waiting.current.draft)) waiting.current = null
+    for (const [name, value] of Object.entries(pendingSelects.current)) {
+      const field = ref.current?.elements.namedItem(name)
+      if (field instanceof HTMLSelectElement && Array.from(field.options).some((option) => option.value === value)) { field.value = value; delete pendingSelects.current[name] }
+    }
     // The record being edited was removed by another form (e.g. its contact was completed): start a new record rather than save stale fields.
     const current = selectionRef.current
     if (!waiting.current && current && selected.current && !current.values(selected.current) && (current.loaded?.() ?? true)) { fill('', {}); persistDraft() }
@@ -124,10 +131,10 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   // Changed fields plus the selected record; hidden baselines (conflict checks) travel with any edit so a restored draft is still checked against what it was based on.
   function draftValues() {
     const editing = Array.from(dirty.current).some((name) => name !== selection?.field)
-    return Object.fromEntries(Array.from(new FormData(ref.current!)).filter(([name]) => {
+    return { ...Object.fromEntries(Array.from(new FormData(ref.current!)).filter(([name]) => {
       const field = ref.current!.elements.namedItem(name)
       return dirty.current.has(name) || name === selection?.field || (editing && field instanceof HTMLInputElement && field.type === 'hidden')
-    }))
+    })), ...pendingSelects.current }
   }
   function persistDraft() {
     try {
@@ -141,13 +148,13 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     setSaved(false)
     if (selection && isField(event.target) && event.target.name === selection.field) { waiting.current = null; dirty.current.clear(); fill(event.target.value, {}) }
     else if (waiting.current && isField(event.target)) waiting.current.draft = { ...waiting.current.draft, [event.target.name]: event.target.value }
-    if (isField(event.target)) dirty.current.add(event.target.name)
+    if (isField(event.target)) { dirty.current.add(event.target.name); delete pendingSelects.current[event.target.name] }
     persistDraft()
   }} onSubmit={async (event) => {
     event.preventDefault()
     const formElement = event.currentTarget
     setError(''); setSaved(false)
-    if (waiting.current) { setError('편집할 대상을 불러온 뒤 저장해 주세요.'); return }
+    if (waiting.current || Object.keys(pendingSelects.current).length) { setError('편집할 대상을 불러온 뒤 저장해 주세요.'); return }
     try {
       const operation = build(new FormData(event.currentTarget))
       const problem = await save(operation)

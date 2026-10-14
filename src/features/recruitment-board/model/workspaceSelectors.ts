@@ -104,7 +104,8 @@ export function hasActiveSchedule(applicant: Applicant) {
 export function isPendingOfferResponse(applicant: Applicant) { return hasActiveOffer(applicant) && applicant.offer?.status === 'SENT' }
 export function isPendingStart(applicant: Applicant) { return canRecordEmployment(applicant) && applicant.employment?.active !== false && Boolean(applicant.employment?.plannedStartDate) && !applicant.employment?.actualStartDate }
 export function isPendingFollowUp(applicant: Applicant, task: NonNullable<Applicant['followUps']>[number]) {
-  return !applicant.archivedAt && task.active !== false && !task.done && (!task.id.startsWith('handoff-') || (applicant.stage === 'HIRED' && hasActiveOffer(applicant)))
+  // An archived talent-pool record can still be re-contacted; the follow-ups its contacts create stay in the queues.
+  return (!applicant.archivedAt || (applicant.talentPool && applicant.contacts?.some(({ id }) => id === task.id))) && task.active !== false && !task.done && (!task.id.startsWith('handoff-') || (applicant.stage === 'HIRED' && hasActiveOffer(applicant)))
 }
 
 export function getWorkDueDates(applicant: Applicant) {
@@ -178,6 +179,9 @@ export function getCalendarEvents(applicants: Applicant[]): CalendarEvent[] {
   const events: CalendarEvent[] = []
   for (const applicant of applicants) {
     if (applicant.talentPool && applicant.reconnectDate) events.push({ id: `reconnect-${applicant.id}`, applicantId: applicant.id, applicantName: applicant.name, role: applicant.role, owner: applicant.owner ?? '미지정', date: applicant.reconnectDate, time: '09:00', type: 'FOLLOW_UP', label: '인재풀 재접촉' })
+    for (const task of applicant.archivedAt ? applicant.followUps ?? [] : []) {
+      if (isPendingFollowUp(applicant, task)) events.push({ id: task.id, applicantId: applicant.id, applicantName: applicant.name, role: applicant.role, owner: applicant.owner ?? '미지정', date: task.dueDate, time: '09:00', type: 'FOLLOW_UP', label: task.label })
+    }
     if (applicant.archivedAt) continue
     if (isPendingOfferResponse(applicant)) events.push({ id: `offer-response-${applicant.id}`, applicantId: applicant.id, applicantName: applicant.name, role: applicant.role, owner: applicant.owner ?? '미지정', date: applicant.offer!.responseDueDate, time: '17:00', type: 'OFFER', label: '오퍼 응답 기한' })
     if (isPendingStart(applicant)) events.push({ id: `start-${applicant.id}`, applicantId: applicant.id, applicantName: applicant.name, role: applicant.role, owner: applicant.owner ?? '미지정', date: applicant.employment!.plannedStartDate, time: '09:00', type: 'START_DATE', label: '입사 예정' })
