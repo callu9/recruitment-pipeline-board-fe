@@ -429,3 +429,14 @@ test('Form sync R9: completing a contact-linked task is checked against the cont
   expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, base, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-11')).toThrow('다른 화면에서 이 연락이 바뀌었습니다.')
   expect(applyApplicantOperation(applicant, { kind: 'task', id: task.id, base: contactVersion(applicant.contacts!.at(-1)!), label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-22').followUps!.find(({ id }) => id === task.id)?.done).toBe(true)
 })
+test('Form sync R11: completing a talent-pool re-contact moves the reconnect date to the next follow-up', () => {
+  const archived = { ...source(), stage: 'REJECTED' as const, archivedAt: '2026-10-01T00:00:00.000Z', talentPool: true, reconnectDate: '2026-10-10', followUps: [] }
+  const done = applyApplicantOperation(archived, { kind: 'contact', channel: '전화', content: '재접촉', date: '2026-10-15', status: 'DONE', reply: '다음에', followUpDate: '' }, '김하나', '2026-10-15')
+  expect(done.reconnectDate).toBe('')
+  const next = applyApplicantOperation(archived, { kind: 'contact', channel: '전화', content: '재접촉', date: '2026-10-15', status: 'DONE', reply: '11월 가능', followUpDate: '2026-11-01' }, '김하나', '2026-10-15')
+  // The next date lives in the re-contact follow-up, so the reconnect date does not duplicate it.
+  expect(next.reconnectDate).toBe('')
+  expect(next.followUps?.some(({ dueDate, done }) => dueDate === '2026-11-01' && !done)).toBe(true)
+  const early = applyApplicantOperation(archived, { kind: 'contact', channel: '전화', content: '사전 연락', date: '2026-10-05', status: 'DONE', reply: '', followUpDate: '' }, '김하나', '2026-10-05')
+  expect(early.reconnectDate).toBe('2026-10-10')
+})

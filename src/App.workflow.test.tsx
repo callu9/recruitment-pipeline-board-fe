@@ -1,4 +1,6 @@
 if (!HTMLDialogElement.prototype.show) HTMLDialogElement.prototype.show = function () { this.open = true }
+import { http, HttpResponse } from 'msw'
+import { server } from './test/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { beforeEach, afterEach, expect, test, vi } from 'vitest'
@@ -616,4 +618,22 @@ test('Form sync R10: the Today evaluation shortcut focuses the pending evaluatio
   const section = screen.getByRole('heading', { name: '평가 작성 필요' }).closest('section')!
   fireEvent.click(within(section).getByRole('button', { name: /^상세 보기:/ }))
   await waitFor(() => expect(document.activeElement?.closest('[data-work-target="evaluation"]')).not.toBeNull())
+})
+test('Form sync R11: feedback waits for position criteria when the position list failed to load', async () => {
+  server.use(http.get('*/api/positions', () => HttpResponse.json({ message: 'fail' }, { status: 503 })))
+  await start(); openDetail()
+  const form = screen.getByRole('form', { name: '서류검토 피드백' })
+  expect(within(form).getByRole('alert')).toHaveTextContent('포지션 평가 기준을 확인하지 못했습니다')
+  expect(within(form).getByRole('button', { name: '피드백 저장' })).toBeDisabled()
+})
+test('Form sync R11: the evaluation queue shows the pending evaluation due date', async () => {
+  const today = getLocalDateString()
+  const base = createSeedApplicants(1, '2026-10-07')[0]!
+  const screen0 = base.evaluations!.find(({ type }) => type === 'SCREEN')!
+  saveApplicants([{ ...base, evaluations: [{ ...screen0, status: 'PENDING', dueDate: today, active: true }], followUps: [{ id: 'task-1', label: '서류 보완 요청', dueDate: '2026-10-01', done: false }] }])
+  await start()
+  fireEvent.click(within(screen.getByRole('navigation', { name: '워크스페이스 메뉴' })).getByRole('button', { name: /^오늘 할 일/ }))
+  const section = screen.getByRole('heading', { name: '평가 작성 필요' }).closest('section')!
+  expect(section).not.toHaveTextContent('2026.10.01')
+  expect(section).toHaveTextContent(today.replaceAll('-', '.'))
 })

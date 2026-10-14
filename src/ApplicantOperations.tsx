@@ -25,7 +25,9 @@ export interface RecordSelection<T> {
   locked?: (id: string) => string[]
 }
 // Save results by draft key, for a form instance remounted while its save was in flight. The key scopes it to one applicant's form.
-const savedResults = new Map<string, { id?: string; clear: string[] }>()
+const savedResults = new Map<string, { id?: string; clear: string[]; error?: string }>()
+const resultListeners = new Set<(key: string) => void>()
+function publishResult(key: string, result: { id?: string; clear: string[]; error?: string }) { savedResults.set(key, result); resultListeners.forEach((listener) => listener(key)) }
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 const isField = (value: unknown): value is Field => value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement || value instanceof HTMLSelectElement
 
@@ -94,19 +96,28 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   }, [key, fill])
   const storedKey = JSON.stringify(stored ?? null)
   useEffect(() => { syncStored() }, [storedKey, syncStored])
-  useEffect(() => {
+  // Applies a save result published for this form key, including by an instance that was unmounted during the save.
+  const consumeResult = useRef(() => {})
+  consumeResult.current = () => {
     const result = savedResults.get(key)
-    if (result) {
-      savedResults.delete(key)
-      dirty.current.clear(); syncStored()
-      let cleared = false
-      for (const name of result.clear) {
-        const field = ref.current?.elements.namedItem(name)
-        if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.value) { field.value = ''; cleared = true }
-      }
-      if (cleared) persistDraft()
-      if (result.id !== undefined && selectionRef.current) waiting.current = { id: result.id, draft: {} }
+    if (!result) return
+    savedResults.delete(key)
+    if (result.error) { setError(result.error); return }
+    dirty.current.clear(); syncStored()
+    let cleared = false
+    for (const name of result.clear) {
+      const field = ref.current?.elements.namedItem(name)
+      if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.value) { field.value = ''; cleared = true }
     }
+    if (cleared) persistDraft()
+    if (result.id !== undefined && selectionRef.current && !fill(result.id, {})) waiting.current = { id: result.id, draft: {} }
+  }
+  useEffect(() => {
+    const listener = (changed: string) => { if (changed === key) consumeResult.current() }
+    resultListeners.add(listener)
+    return () => { resultListeners.delete(listener) }
+  }, [key])
+  useEffect(() => {
     if (waiting.current && fill(waiting.current.id, waiting.current.draft)) waiting.current = null
     for (const [name, value] of Object.entries(pendingSelects.current)) {
       const field = ref.current?.elements.namedItem(name)
@@ -158,7 +169,8 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     try {
       const operation = build(new FormData(event.currentTarget))
       const problem = await save(operation)
-      if (problem) setError(problem)
+      // A form reopened while the save was in flight shows the failure too; its restored draft stays for the retry.
+      if (problem) { setError(problem); publishResult(key, { clear: [], error: problem }) }
       else {
         for (const name of clearAfterSave) {
           const field = formElement.elements.namedItem(name)
@@ -166,7 +178,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
         }
         // Only this form's own draft key changes: a late response never touches another applicant's or form's fields.
         const savedId = selection?.savedId?.(operation)
-        savedResults.set(key, { id: savedId, clear: clearAfterSave })
+        publishResult(key, { id: savedId, clear: clearAfterSave })
         dirty.current.clear()
         try { if (savedId && selection) sessionStorage.setItem(key, JSON.stringify({ [selection.field]: savedId })); else sessionStorage.removeItem(key) } catch { setError('저장했습니다. 초안 정리는 브라우저 저장소 제한으로 실패했습니다.') }
         setDraftError(false); setSaved(true)

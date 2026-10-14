@@ -101,6 +101,11 @@ export function hasActiveSchedule(applicant: Applicant) {
   return isRecruiting(applicant) && applicant.stage === 'INTERVIEW' && applicant.schedule && applicant.schedule.active !== false && !['COMPLETED', 'CANCELLED', 'NO_SHOW', 'POSTPONED'].includes(applicant.schedule.status ?? 'PLANNED')
 }
 
+/** The earliest active evaluation still to be written; the evaluation shortcut and queue date both use it. */
+export function getCurrentPendingEvaluation(applicant: Applicant) {
+  return applicant.evaluations?.filter((evaluation) => isActiveEvaluation(applicant, evaluation) && evaluation.status === 'PENDING').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+}
+
 export function isPendingOfferResponse(applicant: Applicant) { return hasActiveOffer(applicant) && applicant.offer?.status === 'SENT' }
 export function isPendingStart(applicant: Applicant) { return canRecordEmployment(applicant) && applicant.employment?.active !== false && Boolean(applicant.employment?.plannedStartDate) && !applicant.employment?.actualStartDate }
 export function isPendingFollowUp(applicant: Applicant, task: NonNullable<Applicant['followUps']>[number]) {

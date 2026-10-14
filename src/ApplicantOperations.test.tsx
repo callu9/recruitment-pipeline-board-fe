@@ -149,3 +149,20 @@ test('Form sync R8: a restored contact draft keeps the baseline it was edited ag
   expect((form.elements.namedItem('base') as HTMLInputElement).value).toBe(contactVersion(contact))
   sessionStorage.clear()
 })
+test('Form sync R11: a failed save reaches the same form reopened while it was in flight', async () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  let finish: (problem: string) => void = () => {}
+  const save = () => new Promise<string | null>((resolve) => { finish = resolve })
+  const client = new QueryClient()
+  const first = render(<QueryClientProvider client={client}><ApplicantOperations actor="김하나" pending={false} save={save} positions={SEED_POSITIONS} applicant={applicant} /></QueryClientProvider>)
+  const form = screen.getByRole('form', { name: '담당 업무 편집' })
+  fireEvent.change(within(form).getByLabelText('새 메모'), { target: { value: '메모' } })
+  fireEvent.submit(form)
+  first.unmount()
+  render(<QueryClientProvider client={client}><ApplicantOperations actor="김하나" pending={false} save={save} positions={SEED_POSITIONS} applicant={applicant} /></QueryClientProvider>)
+  finish('저장하지 못했습니다. 다시 시도해 주세요.')
+  const reopened = screen.getByRole('form', { name: '담당 업무 편집' })
+  await waitFor(() => expect(within(reopened).getByRole('alert')).toHaveTextContent('저장하지 못했습니다'))
+  expect(within(reopened).getByLabelText('새 메모')).toHaveValue('메모')
+  sessionStorage.clear()
+})
