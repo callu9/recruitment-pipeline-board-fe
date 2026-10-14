@@ -351,3 +351,22 @@ test('PR review P2: stage correction keeps a cancelled interview round inactive'
   const corrected = applyStageTransition(offer, 'INTERVIEW', '2026-10-13', { correction: true })
   expect(corrected.evaluations!.find(({ round, type }) => type === 'INTERVIEW' && round === 1)?.active).toBe(false)
 })
+test('PR review R4: cancelling a round retires every evaluation of that round', () => {
+  let applicant: Applicant = { ...source(), stage: 'INTERVIEW', evaluations: [], schedule: null }
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-10', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'COMPLETED', round: 1 } }, '김하나', '2026-10-07')
+  const first = applicant.evaluations!.find(({ round }) => round === 1)!
+  applicant = submitApplicantEvaluation(applicant, first.id, { reviewer: '김하나', score: 80, comment: '근거' }, '2026-10-10')
+  for (const day of ['2026-10-11', '2026-10-12']) applicant = applyApplicantOperation(applicant, { kind: 'evaluation-plan', evaluationId: first.id, reviewer: '박민지', dueDate: '2026-10-20', reassess: true, reason: '재평가' }, '김하나', day)
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { ...applicant.schedule!, status: 'CANCELLED' } }, '김하나', '2026-10-13')
+  expect(applicant.evaluations!.filter(({ round, type }) => type === 'INTERVIEW' && round === 1).map(({ active }) => active)).toEqual([false, false, false])
+})
+test('PR review R4: cancelled rounds do not count as completed interview rounds', () => {
+  const positions = SEED_POSITIONS.map((position) => position.id === source().positionId ? { ...position, requiredInterviewRounds: 2 } : position)
+  let applicant: Applicant = { ...source(), stage: 'INTERVIEW', evaluations: [], schedule: null }
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-10', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'COMPLETED', round: 1 } }, '김하나', '2026-10-07')
+  applicant = submitApplicantEvaluation(applicant, applicant.evaluations!.find(({ round }) => round === 1)!.id, { reviewer: '김하나', score: 80, comment: '근거' }, '2026-10-10')
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { ...applicant.schedule!, status: 'CANCELLED' } }, '김하나', '2026-10-11')
+  applicant = applyApplicantOperation(applicant, { kind: 'schedule', schedule: { date: '2026-10-12', startTime: '10:00', endTime: '11:00', format: 'VIDEO', interviewer: '김하나', status: 'COMPLETED', round: 2 } }, '김하나', '2026-10-11')
+  applicant = submitApplicantEvaluation(applicant, applicant.evaluations!.find(({ round }) => round === 2)!.id, { reviewer: '김하나', score: 85, comment: '근거' }, '2026-10-12')
+  expect(getTransitionIssues(applicant, 'OFFER', positions).warnings).toContain('필요한 면접 회차의 평가가 완료되지 않았습니다.')
+})

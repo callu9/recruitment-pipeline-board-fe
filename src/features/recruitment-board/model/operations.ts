@@ -140,10 +140,13 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
   const evaluationId = `interview-${applicant.id}-${round}`
   const evaluations = applicant.evaluations ?? []
   const evaluation = evaluations.findLast((item) => item.type === 'INTERVIEW' && (item.round ?? 1) === round)
+  // Re-evaluations registered earlier for a cancelled round must close with it.
+  const closed = ['CANCELLED', 'POSTPONED', 'NO_SHOW'].includes(schedule.status ?? '')
   return {
     ...applicant, schedule: updatedSchedule,
     nextAction: applicant.stage === 'INTERVIEW' ? (schedule.status === 'COMPLETED' ? '면접 평가 작성' : active ? '인터뷰 준비' : schedule.status === 'NO_SHOW' ? '노쇼 후속 연락' : '인터뷰 일정 등록') : applicant.nextAction,
-    evaluations: [...evaluations.map((item) => item === evaluation ? { ...item, dueDate: schedule.date, resumeOnReactivation: undefined, active: applicant.stage === 'INTERVIEW' && !['CANCELLED', 'POSTPONED', 'NO_SHOW'].includes(schedule.status ?? '') } : item),
+    evaluations: [...evaluations.map((item) => item === evaluation ? { ...item, dueDate: schedule.date, resumeOnReactivation: undefined, active: applicant.stage === 'INTERVIEW' && !closed }
+      : closed && item.type === 'INTERVIEW' && (item.round ?? 1) === round ? { ...item, resumeOnReactivation: undefined, active: false } : item),
       ...(!evaluation ? [{ id: evaluationId, type: 'INTERVIEW' as const, status: 'PENDING' as const, dueDate: schedule.date, reviewer: actor, round, active: applicant.stage === 'INTERVIEW' && !['CANCELLED', 'POSTPONED', 'NO_SHOW'].includes(schedule.status ?? '') }] : [])],
     timeline: [...(applicant.timeline ?? []), { id: `operation-${applicant.id}-${(applicant.timeline ?? []).length + 1}`, at, actor, label: `면접 ${round}회차 일정 ${SCHEDULE_STATUS_LABELS[updatedSchedule.status]} · ${schedule.date} ${schedule.startTime}–${schedule.endTime}` }],
   }
@@ -179,7 +182,7 @@ export function getTransitionIssues(applicant: Applicant, target: ApplicantStage
   const warnings: string[] = []
   const blockers = getStageTransitionBlockers(applicant, target)
   const position = positions.find(({ id }) => id === applicant.positionId)
-  if (applicant.stage === 'INTERVIEW' && target === 'OFFER' && getCurrentStageEvaluation(applicant)?.status === 'SUBMITTED' && new Set((applicant.evaluations ?? []).filter((evaluation) => evaluation.type === 'INTERVIEW' && evaluation.status === 'SUBMITTED').map((evaluation) => evaluation.round ?? 1)).size < (position?.requiredInterviewRounds ?? 1)) warnings.push('필요한 면접 회차의 평가가 완료되지 않았습니다.')
+  if (applicant.stage === 'INTERVIEW' && target === 'OFFER' && getCurrentStageEvaluation(applicant)?.status === 'SUBMITTED' && new Set((applicant.evaluations ?? []).filter((evaluation) => evaluation.type === 'INTERVIEW' && evaluation.status === 'SUBMITTED' && evaluation.active !== false).map((evaluation) => evaluation.round ?? 1)).size < (position?.requiredInterviewRounds ?? 1)) warnings.push('필요한 면접 회차의 평가가 완료되지 않았습니다.')
   if (target !== 'REJECTED' && (getCurrentStageEvaluation(applicant)?.status !== 'SUBMITTED' || applicant.evaluations?.some((evaluation) => evaluation.type === getCurrentStageEvaluation(applicant)?.type && evaluation.active !== false && evaluation.status === 'PENDING'))) warnings.push('현재 전형 평가가 완료되지 않았습니다.')
   if (applicant.stage === 'INTERVIEW' && target === 'OFFER' && applicant.schedule?.status !== 'COMPLETED') warnings.push('면접 실시 기록이 없습니다.')
   const assignment = getAssignmentStatus(applicant, positions)

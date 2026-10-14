@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { useRef, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { APPLICANT_ROLES, type Applicant, type ApplicantIntake, type ApplicantOwner, type Position } from './features/recruitment-board/model/applicant.types'
 import { applicantsQueryKey } from './features/recruitment-board/api/useApplicantsQuery'
@@ -11,13 +11,17 @@ import { personKey } from './features/recruitment-board/model/operations'
 import styles from './App.module.css'
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? '')
+// Saves outlive this component: leaving the positions tab unmounts the form while its request is still in flight.
+const saving = new Set<string>()
+const listeners = new Set<() => void>()
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
+const setSaving = (endpoint: string, value: boolean) => { if (value) saving.add(endpoint); else saving.delete(endpoint); listeners.forEach((listener) => listener()) }
 export function RecruitmentManagement({ positions, applicants, actor, mode }: { positions: Position[]; applicants: Applicant[]; actor: ApplicantOwner; mode: 'intake' | 'positions' }) {
   const client = useQueryClient()
-  const lock = useRef(false)
-  const [pending, setPending] = useState(false)
+  const pending = useSyncExternalStore(subscribe, () => saving.has(mode === 'positions' ? 'positions' : 'applicants'))
   async function post(endpoint: 'applicants' | 'positions', body: unknown) {
-    if (lock.current) return '저장 중입니다.'
-    lock.current = true; setPending(true)
+    if (saving.has(endpoint)) return '저장 중입니다.'
+    setSaving(endpoint, true)
     try {
       await client.cancelQueries({ queryKey: endpoint === 'applicants' ? applicantsQueryKey : positionsQueryKey })
       const response = await fetch(`/api/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -29,7 +33,7 @@ export function RecruitmentManagement({ positions, applicants, actor, mode }: { 
       else client.setQueryData<Position[]>(positionsQueryKey, (current = []) => current.some(({ id }) => id === result.id) ? current.map((item) => item.id === result.id ? result : item) : [...current, result])
       return null
     } catch (cause) { return cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해 주세요.' }
-    finally { lock.current = false; setPending(false) }
+    finally { setSaving(endpoint, false) }
   }
   if (mode === 'positions') return <section className={styles.management} aria-label="포지션 관리">
     <OperationForm id="position" title="포지션 개설·수정" pending={pending} save={(position: Position) => post('positions', position)} build={(data): Position => ({ id: text(data, 'id'), title: text(data, 'title'), role: text(data, 'role') as Position['role'], department: text(data, 'department'), requiredCount: Number(text(data, 'requiredCount')), deadline: text(data, 'deadline'), status: text(data, 'status') as Position['status'], description: text(data, 'description'), evaluationCriteria: text(data, 'evaluationCriteria'), assignment: text(data, 'assignment'), requiredInterviewRounds: Number(text(data, 'requiredInterviewRounds')) })}>
