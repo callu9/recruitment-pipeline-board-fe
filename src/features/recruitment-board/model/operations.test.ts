@@ -370,3 +370,11 @@ test('PR review R4: cancelled rounds do not count as completed interview rounds'
   applicant = submitApplicantEvaluation(applicant, applicant.evaluations!.find(({ round }) => round === 2)!.id, { reviewer: '김하나', score: 85, comment: '근거' }, '2026-10-12')
   expect(getTransitionIssues(applicant, 'OFFER', positions).warnings).toContain('필요한 면접 회차의 평가가 완료되지 않았습니다.')
 })
+test('PR review R5: a due date edited on a contact-linked task survives the next contact save', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  const contact = applicant.contacts!.at(-1)!
+  applicant = applyApplicantOperation(applicant, { kind: 'task', id: contact.id, label: applicant.followUps!.find(({ id }) => id === contact.id)!.label, dueDate: '2026-10-12', done: false }, '김하나', '2026-10-08')
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', ...applicant.contacts!.at(-1)!, reply: '회신 대기', followUpDate: applicant.contacts!.at(-1)!.followUpDate ?? '' }, '김하나', '2026-10-09')
+  expect(applicant.followUps!.find(({ id }) => id === contact.id)?.dueDate).toBe('2026-10-12')
+})

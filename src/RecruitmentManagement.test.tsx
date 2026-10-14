@@ -31,3 +31,11 @@ test('PR review R3: a restored edit target waits for the position list before sa
   await waitFor(() => expect(within(form).getByLabelText('편집할 포지션')).toHaveValue(SEED_POSITIONS[0]!.id))
   sessionStorage.clear()
 })
+test('PR review R5: editing other fields before the list loads keeps the restored edit target in the draft', async () => {
+  const key = 'recruitment-operation-draft:position:포지션 개설·수정'
+  sessionStorage.setItem(key, JSON.stringify({ id: SEED_POSITIONS[0]!.id, title: '수정 중' }))
+  render(<QueryClientProvider client={new QueryClient()}><RecruitmentManagement positions={[]} applicants={[]} actor="김하나" mode="positions" /></QueryClientProvider>)
+  fireEvent.change(within(screen.getByRole('form', { name: '포지션 개설·수정' })).getByLabelText('부서'), { target: { value: '플랫폼' } })
+  expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ id: SEED_POSITIONS[0]!.id, department: '플랫폼' })
+  sessionStorage.clear()
+})

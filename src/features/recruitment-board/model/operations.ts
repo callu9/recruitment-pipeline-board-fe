@@ -93,7 +93,9 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (operation.id && !applicant.followUps?.some(({ id }) => id === operation.id)) throw new Error('후속 업무를 찾을 수 없습니다.')
     const contact = applicant.contacts?.find(({ id }) => id === task.id)
     if (task.done && contact?.status === 'PLANNED') return applyApplicantOperation(applicant, { ...contact, kind: 'contact', status: 'DONE', followUpDate: contact.followUpDate ?? '' }, actor, at, positions)
-    return log({ ...applicant, contacts: task.done && contact ? applicant.contacts?.map((item) => item.id === contact.id ? { ...item, followUpDate: '' } : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
+    // A contact-linked task keeps its source contact in step, or the next contact save would restore the old date.
+    const syncContact = (item: NonNullable<Applicant['contacts']>[number]) => task.done ? { ...item, followUpDate: '' } : item.status === 'PLANNED' ? { ...item, date: task.dueDate, followUpDate: item.followUpDate && item.followUpDate < task.dueDate ? task.dueDate : item.followUpDate } : { ...item, followUpDate: task.dueDate }
+    return log({ ...applicant, contacts: contact ? applicant.contacts?.map((item) => item.id === contact.id ? syncContact(item) : item) : applicant.contacts, followUps: operation.id ? applicant.followUps!.map((item) => item.id === task.id ? { ...item, ...task } : item) : [...(applicant.followUps ?? []), task] }, `후속 업무 ${task.done ? '완료' : '등록'} · ${task.label}`)
   }
   if (operation.kind === 'assignment') {
     const status = getAssignmentStatus(applicant, positions)

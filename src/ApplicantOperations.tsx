@@ -35,7 +35,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={(event) => {
     if ('name' in event.target) delete unresolved.current[String(event.target.name)]
     setSaved(false)
-    try { sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(new FormData(ref.current!)))); setDraftError(false) } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
+    try { sessionStorage.setItem(key, JSON.stringify({ ...Object.fromEntries(new FormData(ref.current!)), ...unresolved.current })); setDraftError(false) } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }} onSubmit={async (event) => {
     event.preventDefault()
     const formElement = event.currentTarget
