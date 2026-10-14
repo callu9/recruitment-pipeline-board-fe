@@ -415,3 +415,7 @@ test('Form sync R3: a completed contact-linked task is reopened only from the co
   applicant = applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-15')
   expect(() => applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: false }, '김하나', '2026-10-16')).toThrow('연락에서 만든 업무의 재개는 연락 기록에서 해 주세요.')
 })
+test('Form sync R7: contact history uses business wording instead of status codes', () => {
+  const applicant = applyApplicantOperation({ ...source(), followUps: [] }, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  expect(applicant.timeline?.at(-1)?.label).toBe('수동 연락 예정 · 전화 · 안내 · 응답: ')
+})

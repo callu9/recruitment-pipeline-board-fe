@@ -58,7 +58,7 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (stored && operation.base !== undefined && operation.base !== contactVersion(stored)) throw new Error('다른 화면에서 이 연락이 바뀌었습니다. 연락을 다시 선택해 주세요.')
     const followUps = (applicant.followUps ?? []).filter((task) => task.id !== contact.id)
     if (operation.followUpDate || operation.status === 'PLANNED') followUps.push({ id: contact.id, label: `${operation.status === 'PLANNED' ? '연락 예정' : '재연락'}: ${operation.content}`, dueDate: operation.status === 'PLANNED' ? operation.date : operation.followUpDate, done: false })
-    return log({ ...applicant, contacts: operation.id ? applicant.contacts!.map((item) => item.id === contact.id ? contact : item) : [...(applicant.contacts ?? []), contact], followUps }, `수동 연락 ${operation.status} · ${operation.channel} · ${operation.content} · 응답: ${operation.reply}`)
+    return log({ ...applicant, contacts: operation.id ? applicant.contacts!.map((item) => item.id === contact.id ? contact : item) : [...(applicant.contacts ?? []), contact], followUps }, `수동 연락 ${operation.status === 'DONE' ? '완료' : '예정'} · ${operation.channel} · ${operation.content} · 응답: ${operation.reply}`)
   }
   if (operation.kind === 'offer') {
     requiredText(operation.conditions, '오퍼 조건')

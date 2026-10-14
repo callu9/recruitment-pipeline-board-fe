@@ -40,6 +40,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   const selectionRef = useRef(selection)
   selectionRef.current = selection
   const selected = useRef('')
+  const synced = useRef('')
   // Fields the user changed since the last sync or save; every other field follows the stored record (single-record forms).
   const dirty = useRef(new Set<string>())
   const storedRef = useRef(stored)
@@ -67,6 +68,7 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     }
     for (const element of Array.from(form.elements)) if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.readOnly = locked.includes(element.name)
     selected.current = recordId
+    synced.current = JSON.stringify(stored)
     return true
   }, [])
 
@@ -106,6 +108,18 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     // The record being edited was removed by another form (e.g. its contact was completed): start a new record rather than save stale fields.
     const current = selectionRef.current
     if (!waiting.current && current && selected.current && !current.values(selected.current) && (current.loaded?.() ?? true)) { fill('', {}); persistDraft() }
+    // The selected record changed through another save: untouched fields follow it. Hidden baselines (conflict checks) only move while nothing is being edited.
+    const latest = !waiting.current && current ? current.values(selected.current) : undefined
+    if (latest && JSON.stringify(latest) !== synced.current) {
+      synced.current = JSON.stringify(latest)
+      const editing = Array.from(dirty.current).some((name) => name !== current!.field)
+      for (const [name, value] of Object.entries(latest)) {
+        const field = ref.current?.elements.namedItem(name)
+        if (isField(field) && !dirty.current.has(name) && !(field.type === 'hidden' && editing)) field.value = value
+      }
+      const locked = current!.locked?.(selected.current) ?? []
+      for (const element of Array.from(ref.current?.elements ?? [])) if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.readOnly = locked.includes(element.name)
+    }
   })
   function persistDraft() {
     try {

@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { expect, test } from 'vitest'
 import { ApplicantOperations } from './ApplicantOperations'
 import { createSeedApplicants, SEED_POSITIONS } from './mocks/seedApplicants'
+import { contactVersion } from './features/recruitment-board/model/operations'
 
 test('G17 R2: assignment form does not carry a completed answer to another position', () => {
   const applicant = { ...createSeedApplicants(1, '2026-10-07')[0]!, stage: 'DOCUMENT_REVIEW' as const }
@@ -92,4 +93,43 @@ test('Form sync R6: the evaluation plan form starts from the selected evaluation
   const form = screen.getByRole('form', { name: '평가 계획·재평가' })
   expect(within(form).getByLabelText('계획 평가자')).toHaveValue('이서준')
   expect(within(form).getByLabelText('평가 기한')).toHaveValue('2026-10-25')
+})
+test('Form sync R7: selection forms follow changes to the selected record except fields being edited and the conflict baseline', () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  const evaluation = { ...applicant.evaluations![0]!, reviewer: '이서준' as const, dueDate: '2026-10-20' }
+  const contact = { id: `contact-${applicant.id}-1`, channel: '전화', content: '안내', date: '2026-10-20', status: 'PLANNED' as const, reply: '', actor: '김하나' as const }
+  const task = { id: contact.id, label: '연락 예정: 안내', dueDate: '2026-10-20', done: false }
+  const props = { actor: '김하나' as const, pending: false, save: async () => null, positions: SEED_POSITIONS }
+  const client = new QueryClient()
+  const view = (data: typeof applicant) => <QueryClientProvider client={client}><ApplicantOperations {...props} applicant={data} /></QueryClientProvider>
+  const { rerender } = render(view({ ...applicant, evaluations: [evaluation], contacts: [contact], followUps: [task] }))
+  const plan = screen.getByRole('form', { name: '평가 계획·재평가' })
+  const tasks = screen.getByRole('form', { name: '후속 업무 관리' })
+  const contacts = screen.getByRole('form', { name: '연락 기록' })
+  fireEvent.change(within(tasks).getByLabelText('편집할 업무'), { target: { value: task.id } })
+  fireEvent.change(within(contacts).getByLabelText('편집할 연락'), { target: { value: contact.id } })
+  const base = (contacts as HTMLFormElement).elements.namedItem('base') as HTMLInputElement
+  const originalBase = base.value
+  fireEvent.change(within(plan).getByLabelText('계획 평가자'), { target: { value: '박민지' } })
+  fireEvent.change(within(contacts).getByLabelText('응답'), { target: { value: '회신 작성 중' } })
+  rerender(view({ ...applicant, evaluations: [{ ...evaluation, dueDate: '2026-10-25' }], contacts: [{ ...contact, date: '2026-10-25' }], followUps: [{ ...task, dueDate: '2026-10-25' }] }))
+  expect(within(plan).getByLabelText('평가 기한')).toHaveValue('2026-10-25')
+  expect(within(plan).getByLabelText('계획 평가자')).toHaveValue('박민지')
+  expect(within(tasks).getByLabelText('후속 업무 기한')).toHaveValue('2026-10-25')
+  expect(within(contacts).getByLabelText('연락 날짜')).toHaveValue('2026-10-25')
+  expect(within(contacts).getByLabelText('응답')).toHaveValue('회신 작성 중')
+  expect(base.value).toBe(originalBase)
+})
+test('Form sync R7: a selected but unedited contact keeps its conflict baseline current', () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  const contact = { id: `contact-${applicant.id}-1`, channel: '전화', content: '안내', date: '2026-10-20', status: 'PLANNED' as const, reply: '', actor: '김하나' as const }
+  const props = { actor: '김하나' as const, pending: false, save: async () => null, positions: SEED_POSITIONS }
+  const client = new QueryClient()
+  const view = (data: typeof applicant) => <QueryClientProvider client={client}><ApplicantOperations {...props} applicant={data} /></QueryClientProvider>
+  const { rerender } = render(view({ ...applicant, contacts: [contact] }))
+  const contacts = screen.getByRole('form', { name: '연락 기록' }) as HTMLFormElement
+  fireEvent.change(within(contacts).getByLabelText('편집할 연락'), { target: { value: contact.id } })
+  rerender(view({ ...applicant, contacts: [{ ...contact, status: 'DONE' }] }))
+  expect((contacts.elements.namedItem('base') as HTMLInputElement).value).toBe(contactVersion({ ...contact, status: 'DONE' }))
+  expect(within(contacts).getByLabelText('실행 여부')).toHaveValue('DONE')
 })
