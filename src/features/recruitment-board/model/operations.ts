@@ -4,7 +4,7 @@ import { canRecordEmployment, isClosedInterviewRound, getStageTransitionBlockers
 export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule }
   | { kind: 'profile'; name: string; email: string; phone: string; resumeUrl: string; portfolioUrl: string; source: string }
   | { kind: 'evaluation-plan'; evaluationId: string; reviewer: ApplicantOwner; dueDate: string; reassess: boolean; reason: string }
-  | { kind: 'contact'; id?: string; channel: string; content: string; date: string; status: 'PLANNED' | 'DONE'; reply: string; followUpDate: string }
+  | { kind: 'contact'; id?: string; base?: string; channel: string; content: string; date: string; status: 'PLANNED' | 'DONE'; reply: string; followUpDate: string }
   | { kind: 'offer'; conditions: string; proposedAt: string; responseDueDate: string; status: NonNullable<Applicant['offer']>['status']; reason: string }
   | { kind: 'employment'; plannedStartDate: string; actualStartDate: string }
   | { kind: 'lifecycle'; status: NonNullable<Applicant['lifecycle']>; reason: string }
@@ -15,6 +15,10 @@ export type ApplicantOperation = { kind: 'schedule'; schedule: InterviewSchedule
   | { kind: 'work'; owner: ApplicantOwner; dueDate: string; nextAction: string; note: string }
   | { kind: 'assignment'; assignment: string; dueDate: string; submitted: boolean }
 
+// What the contact form saw when it was filled; a later save from that form is rejected if another form changed it since.
+export function contactVersion(contact: Pick<NonNullable<Applicant['contacts']>[number], 'status' | 'date' | 'followUpDate'>) {
+  return [contact.status, contact.date, contact.followUpDate ?? ''].join('|')
+}
 export function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
 }
@@ -48,6 +52,8 @@ export function applyApplicantOperation(applicant: Applicant, operation: Applica
     if (!validDate(operation.date) || (operation.followUpDate && (!validDate(operation.followUpDate) || operation.followUpDate < operation.date)) || !['PLANNED', 'DONE'].includes(operation.status) || typeof operation.reply !== 'string') throw new Error('연락 날짜·상태·응답을 확인해 주세요.')
     const contact = { ...operation, id: operation.id || `contact-${applicant.id}-${(applicant.contacts ?? []).length + 1}`, actor }
     if (operation.id && !applicant.contacts?.some(({ id }) => id === operation.id)) throw new Error('연락 기록을 찾을 수 없습니다.')
+    const stored = applicant.contacts?.find(({ id }) => id === operation.id)
+    if (stored && operation.base !== undefined && operation.base !== contactVersion(stored)) throw new Error('다른 화면에서 이 연락이 바뀌었습니다. 연락을 다시 선택해 주세요.')
     const followUps = (applicant.followUps ?? []).filter((task) => task.id !== contact.id)
     if (operation.followUpDate || operation.status === 'PLANNED') followUps.push({ id: contact.id, label: `${operation.status === 'PLANNED' ? '연락 예정' : '재연락'}: ${operation.content}`, dueDate: operation.status === 'PLANNED' ? operation.date : operation.followUpDate, done: false })
     return log({ ...applicant, contacts: operation.id ? applicant.contacts!.map((item) => item.id === contact.id ? contact : item) : [...(applicant.contacts ?? []), contact], followUps }, `수동 연락 ${operation.status} · ${operation.channel} · ${operation.content} · 응답: ${operation.reply}`)

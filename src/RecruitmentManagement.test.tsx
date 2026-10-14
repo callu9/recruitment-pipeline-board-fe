@@ -39,3 +39,18 @@ test('PR review R5: editing other fields before the list loads keeps the restore
   expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ id: SEED_POSITIONS[0]!.id, department: '플랫폼' })
   sessionStorage.clear()
 })
+test('PR review final: after creating a position the form edits that position instead of creating another', async () => {
+  setMockApiTestConfig({ delayMs: 0, failureRate: 0 })
+  const client = new QueryClient()
+  client.setQueryData(positionsQueryKey, SEED_POSITIONS)
+  const view = () => <QueryClientProvider client={client}><RecruitmentManagement positions={client.getQueryData(positionsQueryKey) ?? []} applicants={[]} actor="김하나" mode="positions" /></QueryClientProvider>
+  const { rerender } = render(view())
+  const form = screen.getByRole('form', { name: '포지션 개설·수정' })
+  fireEvent.change(within(form).getByLabelText('포지션명'), { target: { value: '새 포지션' } })
+  fireEvent.change(within(form).getByLabelText('부서'), { target: { value: '플랫폼' } })
+  fireEvent.submit(form)
+  await waitFor(() => expect(within(form).getByRole('status')).toHaveTextContent('저장했습니다'))
+  rerender(view())
+  const created = (client.getQueryData(positionsQueryKey) as typeof SEED_POSITIONS).find(({ title }) => title === '새 포지션')!
+  await waitFor(() => expect(within(form).getByLabelText('편집할 포지션')).toHaveValue(created.id))
+})

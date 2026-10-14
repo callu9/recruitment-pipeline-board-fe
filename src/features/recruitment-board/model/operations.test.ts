@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { createSeedApplicants, SEED_POSITIONS } from '../../../mocks/seedApplicants'
-import { applyApplicantOperation, getAssignmentStatus, withCurrentAssignmentChecks, getCriteriaScoreIssue, getEvaluationCriteria, getTransitionIssues } from './operations'
+import { applyApplicantOperation, contactVersion, getAssignmentStatus, withCurrentAssignmentChecks, getCriteriaScoreIssue, getEvaluationCriteria, getTransitionIssues } from './operations'
 import { applyStageTransition, getCurrentStageEvaluation, submitApplicantEvaluation } from './stages'
 import { getCalendarEvents, getWorkDueDates, getMissingEvaluations, getTodayActionableApplicants } from './workspaceSelectors'
 import type { Applicant } from './applicant.types'
@@ -386,4 +386,15 @@ test('PR review final: an evaluation plan change does not reopen a cancelled int
   const round1 = applicant.evaluations!.find(({ round }) => round === 1)!
   applicant = applyApplicantOperation(applicant, { kind: 'evaluation-plan', evaluationId: round1.id, reviewer: '박민지', dueDate: '2026-10-20', reassess: false, reason: '담당 변경' }, '김하나', '2026-10-08')
   expect(applicant.evaluations!.find(({ id }) => id === round1.id)?.active).toBe(false)
+})
+test('PR review R7: a contact form opened before another form completed the contact cannot overwrite it', () => {
+  let applicant: Applicant = { ...source(), followUps: [] }
+  applicant = applyApplicantOperation(applicant, { kind: 'contact', channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '', followUpDate: '' }, '김하나', '2026-10-07')
+  const contact = applicant.contacts!.at(-1)!
+  const base = contactVersion(contact)
+  const task = applicant.followUps!.find(({ id }) => id === contact.id)!
+  applicant = applyApplicantOperation(applicant, { kind: 'task', id: task.id, label: task.label, dueDate: task.dueDate, done: true }, '김하나', '2026-10-10')
+  expect(() => applyApplicantOperation(applicant, { kind: 'contact', id: contact.id, base, channel: '전화', content: '안내', date: '2026-10-10', status: 'PLANNED', reply: '회신', followUpDate: '' }, '김하나', '2026-10-11')).toThrow('다른 화면에서 이 연락이 바뀌었습니다.')
+  const current = applicant.contacts!.at(-1)!
+  expect(applyApplicantOperation(applicant, { kind: 'contact', id: contact.id, base: contactVersion(current), channel: '전화', content: '안내', date: '2026-10-10', status: 'DONE', reply: '회신', followUpDate: '' }, '김하나', '2026-10-11').contacts!.at(-1)).toMatchObject({ status: 'DONE', reply: '회신' })
 })
