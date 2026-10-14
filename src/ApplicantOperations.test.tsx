@@ -85,3 +85,11 @@ test('Form sync R5: single-record forms follow stored changes but keep fields th
   expect(within(offer).getByLabelText('오퍼 조건')).toHaveValue('연봉 조정 중')
   expect(within(offer).getByLabelText('오퍼 상태')).toHaveValue('ACCEPTED')
 })
+test('Form sync R6: the evaluation plan form starts from the selected evaluation', () => {
+  const applicant = createSeedApplicants(1, '2026-10-07')[0]!
+  const evaluation = { ...applicant.evaluations![0]!, reviewer: '이서준' as const, dueDate: '2026-10-25' }
+  render(<QueryClientProvider client={new QueryClient()}><ApplicantOperations actor="김하나" pending={false} save={async () => null} positions={SEED_POSITIONS} applicant={{ ...applicant, evaluations: [evaluation] }} /></QueryClientProvider>)
+  const form = screen.getByRole('form', { name: '평가 계획·재평가' })
+  expect(within(form).getByLabelText('계획 평가자')).toHaveValue('이서준')
+  expect(within(form).getByLabelText('평가 기한')).toHaveValue('2026-10-25')
+})

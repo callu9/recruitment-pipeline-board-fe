@@ -19,6 +19,8 @@ export interface RecordSelection<T> {
   savedId?: (operation: T) => string | undefined
   /** Whether the records' source has loaded; a missing record then means it was removed, not that it is still loading. Defaults to true. */
   loaded?: () => boolean
+  /** The record selected when there is no draft, if the select has no '' (new record) option. */
+  initial?: () => string
   /** Fields that the selected record does not allow editing here. */
   locked?: (id: string) => string[]
 }
@@ -75,7 +77,8 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
     try { values = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, string> } catch { /* A corrupt draft does not prevent editing the saved record. */ }
     const current = selectionRef.current
     if (current) {
-      const { [current.field]: recordId = '', ...draft } = values
+      const { [current.field]: recordId = current.initial?.() ?? '', ...draft } = values
+      for (const name of Object.keys(draft)) dirty.current.add(name)
       if (!fill(recordId, draft)) waiting.current = { id: recordId, draft }
       return
     }
@@ -106,14 +109,15 @@ export function OperationForm<T>({ id, title, pending, build, save, children, cl
   })
   function persistDraft() {
     try {
+      // A draft holds only what the user changed (plus the selected record), so untouched fields keep following the stored data.
       // While the record is still loading the fields are not filled yet, so the draft is the restored draft plus what was typed since.
-      const values = waiting.current && selection ? { ...waiting.current.draft, [selection.field]: waiting.current.id } : Object.fromEntries(new FormData(ref.current!))
+      const values = waiting.current && selection ? { ...waiting.current.draft, [selection.field]: waiting.current.id } : Object.fromEntries(Array.from(new FormData(ref.current!)).filter(([name]) => dirty.current.has(name) || name === selection?.field))
       sessionStorage.setItem(key, JSON.stringify(values)); setDraftError(false)
     } catch { setDraftError(true); setError('초안 저장 공간이 부족합니다. 창을 닫기 전에 저장해 주세요.') }
   }
   return <details data-operation-title={title} className={styles.detailSection}><summary>{title}</summary><form ref={ref} className={styles.feedbackForm} aria-label={title} data-draft-error={draftError || undefined} aria-busy={pending} onChange={(event) => {
     setSaved(false)
-    if (selection && isField(event.target) && event.target.name === selection.field) { waiting.current = null; fill(event.target.value, {}) }
+    if (selection && isField(event.target) && event.target.name === selection.field) { waiting.current = null; dirty.current.clear(); fill(event.target.value, {}) }
     else if (waiting.current && isField(event.target)) waiting.current.draft = { ...waiting.current.draft, [event.target.name]: event.target.value }
     if (isField(event.target)) dirty.current.add(event.target.name)
     persistDraft()
@@ -158,6 +162,16 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
     },
     savedId: (operation) => operation.kind === 'contact' ? operation.id ?? latest().contacts?.at(-1)?.id : undefined,
   }
+  const evaluationSelection: RecordSelection<ApplicantOperation> = {
+    field: 'evaluationId',
+    initial: () => latest().evaluations?.[0]?.id ?? '',
+    values: (id) => {
+      if (!id) return { reviewer: actor, dueDate: '' }
+      const evaluation = latest().evaluations?.find((item) => item.id === id)
+      return evaluation && { reviewer: evaluation.reviewer, dueDate: evaluation.dueDate }
+    },
+    savedId: (operation) => operation.kind === 'evaluation-plan' ? operation.evaluationId : undefined,
+  }
   const taskSelection: RecordSelection<ApplicantOperation> = {
     field: 'id',
     values: (id) => {
@@ -190,8 +204,8 @@ export function ApplicantOperations({ applicant, actor, pending, save, positions
     <label>면접 상태<NativeSelect name="status" defaultValue={applicant.schedule?.status ?? 'PLANNED'}>{Object.entries(SCHEDULE_STATUS_LABELS).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></label>
   </>, undefined, undefined, { date: applicant.schedule?.date ?? '', startTime: applicant.schedule?.startTime ?? '10:00', endTime: applicant.schedule?.endTime ?? '11:00', format: applicant.schedule?.format ?? 'VIDEO', interviewer: applicant.schedule?.interviewer ?? actor, round: String(applicant.schedule?.round ?? 1), status: applicant.schedule?.status ?? 'PLANNED' })}
     {form('평가 계획·재평가', (data) => ({ kind: 'evaluation-plan', evaluationId: text(data, 'evaluationId'), reviewer: text(data, 'reviewer') as ApplicantOwner, dueDate: text(data, 'dueDate'), reassess: text(data, 'reassess') === 'true', reason: text(data, 'reason') }), <>
-      <label>대상 평가<NativeSelect name="evaluationId" required>{applicant.evaluations?.map((evaluation) => <NativeSelectOption key={evaluation.id} value={evaluation.id}>{EVALUATION_TYPE_LABELS[evaluation.type]} · {evaluation.round ?? 1}회차 · {EVALUATION_STATUS_LABELS[evaluation.status]} · {evaluation.id}</NativeSelectOption>)}</NativeSelect></label><label>계획 평가자<NativeSelect name="reviewer" defaultValue={actor}>{APPLICANT_OWNERS.map((owner) => <NativeSelectOption key={owner}>{owner}</NativeSelectOption>)}</NativeSelect></label><label>평가 기한<Input name="dueDate" type="date" required /></label><label>평가 계획 작업<NativeSelect name="reassess"><NativeSelectOption value="false">대기 평가 기한·담당 변경</NativeSelectOption><NativeSelectOption value="true">제출된 평가를 보존하고 재평가 등록</NativeSelectOption></NativeSelect></label><label>평가 계획 사유<Input name="reason" required /></label>
-    </>)}
+      <label>대상 평가<NativeSelect name="evaluationId" required>{applicant.evaluations?.map((evaluation) => <NativeSelectOption key={evaluation.id} value={evaluation.id}>{EVALUATION_TYPE_LABELS[evaluation.type]} · {evaluation.round ?? 1}회차 · {EVALUATION_STATUS_LABELS[evaluation.status]} · {evaluation.id}</NativeSelectOption>)}</NativeSelect></label><label>계획 평가자<NativeSelect name="reviewer">{APPLICANT_OWNERS.map((owner) => <NativeSelectOption key={owner}>{owner}</NativeSelectOption>)}</NativeSelect></label><label>평가 기한<Input name="dueDate" type="date" required /></label><label>평가 계획 작업<NativeSelect name="reassess"><NativeSelectOption value="false">대기 평가 기한·담당 변경</NativeSelectOption><NativeSelectOption value="true">제출된 평가를 보존하고 재평가 등록</NativeSelectOption></NativeSelect></label><label>평가 계획 사유<Input name="reason" required /></label>
+    </>, undefined, evaluationSelection)}
     {form('연락 기록', (data) => ({ kind: 'contact', id: text(data, 'id') || undefined, base: text(data, 'id') ? text(data, 'base') : undefined, channel: text(data, 'channel'), content: text(data, 'content'), date: text(data, 'date'), status: text(data, 'status') as 'PLANNED' | 'DONE', reply: text(data, 'reply'), followUpDate: text(data, 'followUpDate') }), <>
       <label>편집할 연락<NativeSelect name="id"><NativeSelectOption value="">새 연락</NativeSelectOption>{applicant.contacts?.map((contact) => <NativeSelectOption key={contact.id} value={contact.id}>{formatWorkspaceDate(contact.date)} · {contact.content}</NativeSelectOption>)}</NativeSelect></label>
       <label>연락 채널<Input name="channel" required placeholder="이메일 / 전화 / 문자" /></label><label>연락 날짜<Input name="date" type="date" required /></label><label>연락 내용<textarea name="content" required /></label><label>실행 여부<NativeSelect name="status"><NativeSelectOption value="PLANNED">연락 예정</NativeSelectOption><NativeSelectOption value="DONE">연락 완료</NativeSelectOption></NativeSelect></label><label>응답<textarea name="reply" /></label><label>재연락 기한<Input name="followUpDate" type="date" /></label><input type="hidden" name="base" /><p>이 화면은 수동 기록입니다. 이메일·문자를 발송하지 않습니다.</p>
