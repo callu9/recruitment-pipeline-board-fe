@@ -1,11 +1,11 @@
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { APPLICANT_ROLES, type Applicant, type ApplicantIntake, type ApplicantOwner, type Position } from './features/recruitment-board/model/applicant.types'
 import { applicantsQueryKey } from './features/recruitment-board/api/useApplicantsQuery'
 import { positionsQueryKey } from './features/recruitment-board/api/usePositionsQuery'
-import { OperationForm } from './ApplicantOperations'
+import { OperationForm, type RecordSelection } from './ApplicantOperations'
 import { getLocalDateString } from './features/recruitment-board/model/stages'
 import { personKey } from './features/recruitment-board/model/operations'
 import styles from './App.module.css'
@@ -15,16 +15,23 @@ const text = (data: FormData, key: string) => String(data.get(key) ?? '')
 const saving = new Set<string>()
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
-// After creating a position the form switches to editing it, so a follow-up save cannot create a duplicate (kept outside for remounts).
-const createdPosition: { id?: string } = {}
+// The ID the last position save returned; read right after the save, even if the form was unmounted meanwhile.
+const lastSavedPosition: { id?: string } = {}
+const POSITION_FIELDS = ['title', 'role', 'department', 'requiredCount', 'deadline', 'status', 'description', 'evaluationCriteria', 'assignment', 'requiredInterviewRounds'] as const
 const setSaving = (endpoint: string, value: boolean) => { if (value) saving.add(endpoint); else saving.delete(endpoint); listeners.forEach((listener) => listener()) }
 export function RecruitmentManagement({ positions, applicants, actor, mode }: { positions: Position[]; applicants: Applicant[]; actor: ApplicantOwner; mode: 'intake' | 'positions' }) {
   const client = useQueryClient()
   const pending = useSyncExternalStore(subscribe, () => saving.has(mode === 'positions' ? 'positions' : 'applicants'))
-  useEffect(() => {
-    const select = document.querySelector<HTMLSelectElement>('form[aria-label="포지션 개설·수정"] select[name="id"]')
-    if (createdPosition.id && select && [...select.options].some(({ value }) => value === createdPosition.id)) { select.value = createdPosition.id; createdPosition.id = undefined }
-  })
+  const positionSelection: RecordSelection<Position> = {
+    field: 'id',
+    values: (id) => {
+      const defaults: Partial<Position> = { role: APPLICANT_ROLES[0], requiredCount: 1, deadline: getLocalDateString(), status: 'OPEN', requiredInterviewRounds: 1 }
+      // Older stored positions lack optional fields such as requiredInterviewRounds; they edit with the same defaults as a new one.
+      const position = id ? (client.getQueryData<Position[]>(positionsQueryKey) ?? positions).find((item) => item.id === id) : defaults
+      return position && Object.fromEntries(POSITION_FIELDS.map((name) => [name, String(position[name] ?? defaults[name] ?? '')]))
+    },
+    savedId: () => lastSavedPosition.id,
+  }
   async function post(endpoint: 'applicants' | 'positions', body: unknown) {
     if (saving.has(endpoint)) return '저장 중입니다.'
     setSaving(endpoint, true)
@@ -37,21 +44,14 @@ export function RecruitmentManagement({ positions, applicants, actor, mode }: { 
       // Without a loaded list, caching only the saved position would hide the others and the retry state.
       else if (!client.getQueryData(positionsQueryKey)) void client.invalidateQueries({ queryKey: positionsQueryKey })
       else client.setQueryData<Position[]>(positionsQueryKey, (current = []) => current.some(({ id }) => id === result.id) ? current.map((item) => item.id === result.id ? result : item) : [...current, result])
-      if (endpoint === 'positions' && !(body as Position).id) createdPosition.id = result.id
+      if (endpoint === 'positions') lastSavedPosition.id = result.id
       return null
     } catch (cause) { return cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해 주세요.' }
     finally { setSaving(endpoint, false) }
   }
   if (mode === 'positions') return <section className={styles.management} aria-label="포지션 관리">
-    <OperationForm id="position" title="포지션 개설·수정" pending={pending} save={(position: Position) => post('positions', position)} build={(data): Position => ({ id: text(data, 'id'), title: text(data, 'title'), role: text(data, 'role') as Position['role'], department: text(data, 'department'), requiredCount: Number(text(data, 'requiredCount')), deadline: text(data, 'deadline'), status: text(data, 'status') as Position['status'], description: text(data, 'description'), evaluationCriteria: text(data, 'evaluationCriteria'), assignment: text(data, 'assignment'), requiredInterviewRounds: Number(text(data, 'requiredInterviewRounds')) })}>
-      <label>편집할 포지션<NativeSelect name="id" onChange={(event) => {
-        const position = positions.find(({ id }) => id === event.target.value)
-        const form = event.target.form!
-        for (const name of ['title', 'role', 'department', 'requiredCount', 'deadline', 'status', 'description', 'evaluationCriteria', 'assignment', 'requiredInterviewRounds'] as const) {
-          const field = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-          field.value = String(position?.[name] ?? ({ role: APPLICANT_ROLES[0], requiredCount: 1, deadline: getLocalDateString(), status: 'OPEN', requiredInterviewRounds: 1 } as Record<string, unknown>)[name] ?? '')
-        }
-      }}><NativeSelectOption value="">새 포지션</NativeSelectOption>{positions.map((position) => <NativeSelectOption key={position.id} value={position.id}>{position.title}</NativeSelectOption>)}</NativeSelect></label>
+    <OperationForm id="position" title="포지션 개설·수정" pending={pending} selection={positionSelection} save={(position: Position) => post('positions', position)} build={(data): Position => ({ id: text(data, 'id'), title: text(data, 'title'), role: text(data, 'role') as Position['role'], department: text(data, 'department'), requiredCount: Number(text(data, 'requiredCount')), deadline: text(data, 'deadline'), status: text(data, 'status') as Position['status'], description: text(data, 'description'), evaluationCriteria: text(data, 'evaluationCriteria'), assignment: text(data, 'assignment'), requiredInterviewRounds: Number(text(data, 'requiredInterviewRounds')) })}>
+      <label>편집할 포지션<NativeSelect name="id"><NativeSelectOption value="">새 포지션</NativeSelectOption>{positions.map((position) => <NativeSelectOption key={position.id} value={position.id}>{position.title}</NativeSelectOption>)}</NativeSelect></label>
       <label>포지션명<Input name="title" required /></label><label>직무<NativeSelect name="role">{APPLICANT_ROLES.map((role) => <NativeSelectOption key={role}>{role}</NativeSelectOption>)}</NativeSelect></label><label>부서<Input name="department" required /></label><label>목표 인원<Input name="requiredCount" type="number" min="1" required defaultValue="1" /></label><label>모집 기한<Input name="deadline" type="date" required defaultValue={getLocalDateString()} /></label><label>모집 상태<NativeSelect name="status"><NativeSelectOption value="OPEN">채용 중</NativeSelectOption><NativeSelectOption value="PAUSED">모집 중단</NativeSelectOption><NativeSelectOption value="CLOSED">모집 마감</NativeSelectOption></NativeSelect></label><label>JD<textarea name="description" /></label><label>평가 기준 (줄마다 하나, 평가 시 기준별 1–5점)<textarea name="evaluationCriteria" /></label><label>과제 (입력 시 면접 진행 전 제출 확인)<textarea name="assignment" /></label><label>필요 면접 회차<Input name="requiredInterviewRounds" type="number" min="1" max="20" defaultValue="1" required /></label><p>모집 중단·마감은 신규 접수를 막습니다. 기존 지원자의 전형은 계속 진행하며 지원자별 보류·철회는 상세에서 처리합니다.</p>
     </OperationForm>
   </section>
